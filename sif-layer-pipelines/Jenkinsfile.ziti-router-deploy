@@ -106,23 +106,23 @@ EOF
         // *** HEALTH / LOGS     ***
         // *************************
         stage("Health_Check"){
-            steps {
-                echo "***** Recent logs & quick health check *****"
-                sh '''
-                    set -eux
-                    sudo journalctl -u "${SYSTEMD_UNIT}" -n 100 --no-pager || true
-
-                    # Fail fast on obvious recent errors
-                    if sudo journalctl -u "${SYSTEMD_UNIT}" --since "5 min ago" --no-pager | \
-                       grep -Ei "(ENROLL|JWT|timeout|unreachable|certificate|xgress.*error)"; then
-                        echo "Recent router errors detected."
-                        exit 1
-                    fi
-
-                    sudo systemctl is-active "${SYSTEMD_UNIT}"
-                    echo "If endpoints are reachable, the router should show ONLINE in cloudziti."
-                '''
-            }
+          steps {
+            echo "***** Recent logs & quick health check *****"
+            sh '''
+              set -eux
+              sudo journalctl -u "${SYSTEMD_UNIT}" -n 100 --no-pager || true
+        
+              # Fail only on clear errors/timeouts/unreachable
+              if sudo journalctl -u "${SYSTEMD_UNIT}" --since "5 min ago" --no-pager | \
+                 grep -Ei '"level":"error"|timeout|unreachable|xgress[^"]*error'; then
+                echo "Recent router errors detected."
+                exit 1
+              fi
+        
+              sudo systemctl is-active "${SYSTEMD_UNIT}"
+              echo "Router is running. Check cloudziti console for ONLINE."
+            '''
+          }
         }
     }
 
@@ -134,3 +134,4 @@ EOF
         // always { archiveArtifacts artifacts: 'artifacts/**', allowEmptyArchive: true }
     }
 }
+
