@@ -31,12 +31,13 @@ pipeline {
             steps {
                 echo "***** Installing OpenZiti router package *****"
                 sh '''
-                    set -eux
-                    # Official installer from NetFoundry docs
-                    curl -sS https://get.openziti.io/install.bash | sudo bash -s openziti-router
-
-                    # Ensure bootstrap dir exists (where bootstrap.env + JWT live)
-                    sudo mkdir -p "${BOOT_DIR}"
+                      set -eux
+                      if ! command -v /opt/openziti/bin/ziti >/dev/null 2>&1; then
+                        curl -sS https://get.openziti.io/install.bash | sudo bash -s openziti-router
+                      else
+                        echo "openziti already installed; skipping."
+                      fi
+                      sudo mkdir -p "${BOOT_DIR}"
                 '''
             }
         }
@@ -134,4 +135,5 @@ EOF
         // always { archiveArtifacts artifacts: 'artifacts/**', allowEmptyArchive: true }
     }
 }
+
 
