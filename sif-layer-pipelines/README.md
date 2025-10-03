@@ -1,9 +1,9 @@
 # 🚀 Ziti Edge Router Deploy — Jenkins Pipeline
 
-> CI/CD pipeline to **install**, **bootstrap**, and **validate** an OpenZiti Edge Router on a Linux host using `systemd`.
+> CI/CD pipeline to **deploy**, **test**, and **validate** an OpenZiti Edge Router on a Linux host.
 
 ---
-
+ deploying, testing, and validating
 ## 🧭 Overview
 
 This Jenkins pipeline (`Jenkinsfile.ziti-router-deploy`) automates the lifecycle of an **Edge Router**:
@@ -78,7 +78,7 @@ These environment variables/credentials are consumed by the pipeline:
 1. Configure the Jenkins job to use this `Jenkinsfile.ziti-router-deploy` from `sif-layer-pipelines/`.
 2. Add the **JWT** as a secret file credential and reference it as `JWT_FILE`.
 3. Provide controller/router variables via Jenkins parameters or environment.
-4. Run the build. Re-run is safe for a clean “green” view in Jenkins.
+4. Run the build. 
 
 ---
 
@@ -114,11 +114,6 @@ These environment variables/credentials are consumed by the pipeline:
   sudo systemctl restart ziti-router.service
   ```
 
-- **Benign warnings** you may see (typically safe to ignore unless service is unhealthy):  
-  ```text
-  identity ... could not read file [/var/lib/private/ziti-router/router.key]: permission denied
-  ```
-
 If the pipeline fails in **Health_Check**, re-run once to verify stability. Persistent failures usually indicate TLS/CA mismatch, controller reachability issues, or incorrect `bootstrap.env` values.
 
 ---
@@ -128,3 +123,4 @@ If the pipeline fails in **Health_Check**, re-run once to verify stability. Pers
 - Keep the pipeline **idempotent** and **secure** (use Jenkins credentials & least‑privilege).
 - Update this README when adding stages, parameters, or behavior changes.
 - Prefer official docs for installation details; this pipeline is a thin automation wrapper.
+
