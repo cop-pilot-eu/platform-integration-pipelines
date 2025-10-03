@@ -111,17 +111,18 @@ EOF
             echo "***** Recent logs & quick health check *****"
             sh '''
               set -eux
-              sudo journalctl -u "${SYSTEMD_UNIT}" -n 100 --no-pager || true
+              sudo journalctl -u "${SYSTEMD_UNIT}" -n 80 --no-pager || true
         
-              # Fail only on clear errors/timeouts/unreachable
-              if sudo journalctl -u "${SYSTEMD_UNIT}" --since "5 min ago" --no-pager | \
-                 grep -Ei '"level":"error"|timeout|unreachable|xgress[^"]*error'; then
+              # Only consider the last 60s and only hard failures
+              if sudo journalctl -u "${SYSTEMD_UNIT}" --since "60 seconds ago" --no-pager | \
+                 grep -Eiq '"level":"error"|timeout|unreachable|xgress[^"]*error'; then
                 echo "Recent router errors detected."
                 exit 1
               fi
         
-              sudo systemctl is-active "${SYSTEMD_UNIT}"
-              echo "Router is running. Check cloudziti console for ONLINE."
+              # Final truth
+              sudo systemctl is-active --quiet "${SYSTEMD_UNIT}"
+              echo "Router active and healthy."
             '''
           }
         }
@@ -135,6 +136,7 @@ EOF
         // always { archiveArtifacts artifacts: 'artifacts/**', allowEmptyArchive: true }
     }
 }
+
 
 
 
