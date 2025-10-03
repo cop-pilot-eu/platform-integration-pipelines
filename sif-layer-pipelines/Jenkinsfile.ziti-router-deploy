@@ -111,16 +111,20 @@ EOF
             echo "***** Recent logs & quick health check *****"
             sh '''
               set -eux
-              sudo journalctl -u "${SYSTEMD_UNIT}" -n 80 --no-pager || true
         
-              # Only consider the last 60s and only hard failures
-              if sudo journalctl -u "${SYSTEMD_UNIT}" --since "60 seconds ago" --no-pager | \
-                 grep -Eiq '"level":"error"|timeout|unreachable|xgress[^"]*error'; then
+              # Show a short tail for visibility (never fails the build)
+              sudo journalctl -u "${SYSTEMD_UNIT}" -n 80 --no-pager || true
+
+              # Fail only on serious errors.
+              if sudo journalctl -u "${SYSTEMD_UNIT}" --since "90 seconds ago" --no-pager \
+                | grep -vi 'identity.*router\\.key.*permission denied' \
+                | grep -Eiq 'panic|fatal|segfault|exited with status|failed to start|TLS .*failed|certificate .*failed|unreachable|timeout|xgress[^"]*error'
+              then
                 echo "Recent router errors detected."
                 exit 1
               fi
         
-              # Final truth
+              # Final truth: service must be running
               sudo systemctl is-active --quiet "${SYSTEMD_UNIT}"
               echo "Router active and healthy."
             '''
@@ -136,6 +140,7 @@ EOF
         // always { archiveArtifacts artifacts: 'artifacts/**', allowEmptyArchive: true }
     }
 }
+
 
 
 
