@@ -49,19 +49,6 @@ When adding a new pipeline:
 
 ---
 
-## 🧪 Quick Start (example)
-
-```bash
-# Clone the repo
-git clone https://github.com/<org>/platform-integration-pipelines.git
-cd platform-integration-pipelines
-
-# Explore a component
-cd sif-layer-pipelines
-cat README.md   # instructions specific to SIF Layer pipelines
-```
-
----
 
 ## 📌 Conventions
 
@@ -75,4 +62,5 @@ cat README.md   # instructions specific to SIF Layer pipelines
 <p align="center">
   <sub>Built with ❤️ to make platform integration smooth and predictable.</sub>
 </p>
+
 
