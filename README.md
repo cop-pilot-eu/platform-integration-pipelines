@@ -1,9 +1,5 @@
 # 🚀 Platform Integration Pipelines
 
-[![CI/CD](https://img.shields.io/badge/CI%2FCD-Jenkins-blue)](#)
-[![IaC](https://img.shields.io/badge/IaC-Bash%20%2F%20Shell-green)](#)
-[![License](https://img.shields.io/badge/status-Active-success)](#)
-
 > A curated set of **CI/CD pipelines** for integrating, deploying, and validating the platform architecture components.  
 > Automate installs, configuration, and end‑to‑end checks for **seamless interoperability** across the stack.
 
@@ -79,3 +75,4 @@ cat README.md   # instructions specific to SIF Layer pipelines
 <p align="center">
   <sub>Built with ❤️ to make platform integration smooth and predictable.</sub>
 </p>
+
