@@ -16,7 +16,7 @@ pipeline {
 
         // --- Controller endpoints (from the Network Firewall Info dialog) ---
         CTRL_ADDR    = "39132d5f-04bc-4b2a-8301-c4750aeca899.production.netfoundry.io"
-        CTRL_PORT    = "443"   // if 443 fails in your env, re-run with 6262
+        CTRL_PORT    = "443"   // also 6262
 
         // --- Jenkins credentials (Secret file with the enrollment JWT you downloaded) ---
         ER_JWT_CRED  = "er_enrollment_jwt"
@@ -135,5 +135,6 @@ EOF
         // always { archiveArtifacts artifacts: 'artifacts/**', allowEmptyArchive: true }
     }
 }
+
 
 
