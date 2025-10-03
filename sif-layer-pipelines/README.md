@@ -128,9 +128,3 @@ If the pipeline fails in **Health_Check**, re-run once to verify stability. Pers
 - Keep the pipeline **idempotent** and **secure** (use Jenkins credentials & least‑privilege).
 - Update this README when adding stages, parameters, or behavior changes.
 - Prefer official docs for installation details; this pipeline is a thin automation wrapper.
-
----
-
-## 🧾 License
-
-This pipeline and documentation are provided under the repository’s root license.
