@@ -140,8 +140,3 @@ EOF
         // always { archiveArtifacts artifacts: 'artifacts/**', allowEmptyArchive: true }
     }
 }
-
-
-
-
-
