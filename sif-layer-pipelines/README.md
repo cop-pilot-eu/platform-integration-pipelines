@@ -3,7 +3,6 @@
 > CI/CD pipeline to **deploy**, **test**, and **validate** an OpenZiti Edge Router on a Linux host.
 
 ---
- deploying, testing, and validating
 ## 🧭 Overview
 
 This Jenkins pipeline (`Jenkinsfile.ziti-router-deploy`) automates the lifecycle of an **Edge Router**:
@@ -123,4 +122,5 @@ If the pipeline fails in **Health_Check**, re-run once to verify stability. Pers
 - Keep the pipeline **idempotent** and **secure** (use Jenkins credentials & least‑privilege).
 - Update this README when adding stages, parameters, or behavior changes.
 - Prefer official docs for installation details; this pipeline is a thin automation wrapper.
+
 
