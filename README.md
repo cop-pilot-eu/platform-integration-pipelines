@@ -27,7 +27,13 @@ Contents:
 - `Jenkinsfile.orion-context-broker-deploy` — Deploys Orion + MongoDB stack  
 - `README-orion_context_broker_deploy.md` — Detailed documentation, parameters, stages, and health checks
 
-> This folder will expand as more data-management services (e.g., BML components) are added.
+### **`cop-pilot-portal-pipelines/`** 🟩  
+Pipelines dedicated to deploying the **COP-PILOT Portal** 
+
+**Contents:**
+- `Jenkinsfile.cop-pilot-portal-deploy` — Pulls Harbor image, deploys the Portal, and performs smoke tests  
+- `README-cop-pilot-portal-deploy.md` — Full component-level documentation with parameter descriptions  
+- `docker-compose.yml` — Compose file used by the deployment pipeline
 
 ---
 
@@ -76,6 +82,7 @@ When adding a new pipeline:
 <p align="center">
   <sub>Built with ❤️ to make platform integration smooth and predictable.</sub>
 </p>
+
 
 
 
