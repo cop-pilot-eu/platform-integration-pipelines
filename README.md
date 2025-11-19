@@ -13,9 +13,19 @@ The repository is organized by component layers. Each folder contains pipelines 
   Pipelines for deploying, testing, and validating the **SIF Layer**.  
   ➜ See the per‑folder `README.md` for usage and details.
 
-> New component folders (e.g., **BML**, etc.) can be added as the platform evolves.
+---
+
+### **`data-management-pipelines/orion-context-broker/`** 🟦  
+Pipelines for deploying and verifying **data-management components**, starting with the **Orion Context Broker**.
+
+Contents:
+- `Jenkinsfile.orion-context-broker-deploy` — Deploys Orion + MongoDB stack  
+- `README-orion_context_broker_deploy.md` — Detailed documentation, parameters, stages, and health checks
+
+> This folder will expand as more data-management services (e.g., BML components) are added.
 
 ---
+
 
 ## 📘 Documentation
 
@@ -62,5 +72,6 @@ When adding a new pipeline:
 <p align="center">
   <sub>Built with ❤️ to make platform integration smooth and predictable.</sub>
 </p>
+
 
 
