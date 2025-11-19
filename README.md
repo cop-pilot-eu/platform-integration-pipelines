@@ -9,9 +9,14 @@
 
 The repository is organized by component layers. Each folder contains pipelines specific to that part of the architecture.
 
-- **`sif-layer-pipelines/`** ✳️  
-  Pipelines for deploying, testing, and validating the **SIF Layer**.  
-  ➜ See the per‑folder `README.md` for usage and details.
+---
+
+### **`sif-layer-pipelines/`** ✳️  
+Pipelines responsible for deploying, configuring, and validating the **SIF Layer**.
+
+Contents:
+- `Jenkinsfile.ziti-router-deploy` — Deploy & validate an OpenZiti Edge Router  
+- `README.md` — Component-level documentation & usage guide
 
 ---
 
@@ -25,7 +30,6 @@ Contents:
 > This folder will expand as more data-management services (e.g., BML components) are added.
 
 ---
-
 
 ## 📘 Documentation
 
@@ -72,6 +76,7 @@ When adding a new pipeline:
 <p align="center">
   <sub>Built with ❤️ to make platform integration smooth and predictable.</sub>
 </p>
+
 
 
 
