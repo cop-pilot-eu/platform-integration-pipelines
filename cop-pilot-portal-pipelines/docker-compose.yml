@@ -1,0 +1,29 @@
+version: "3.9"
+
+services:
+  app:
+    image: ${DOCKER_REG}${DOCKER_REPO}${APP_NAME}:${DOCKER_TAG}
+    env_file:
+      - .env
+    environment:
+      SQLITE_DB_PATH: /data/sqlite.db
+      NODE_ENV: production
+    ports:
+      - "3000:3000"
+    depends_on:
+      sqlite:
+        condition: service_started
+    volumes:
+      - sqlite-data:/data
+    restart: unless-stopped
+
+  sqlite:
+    image: alpine:3.20
+    command: >
+      sh -c "touch /data/sqlite.db && chown 1001:1001 /data/sqlite.db && tail -f /dev/null"
+    volumes:
+      - sqlite-data:/data
+    restart: unless-stopped
+
+volumes:
+  sqlite-data:
