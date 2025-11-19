@@ -27,6 +27,8 @@ Contents:
 - `Jenkinsfile.orion-context-broker-deploy` — Deploys Orion + MongoDB stack  
 - `README-orion_context_broker_deploy.md` — Detailed documentation, parameters, stages, and health checks
 
+---
+
 ### **`cop-pilot-portal-pipelines/`** 🟩  
 Pipelines dedicated to deploying the **COP-PILOT Portal** 
 
@@ -82,6 +84,7 @@ When adding a new pipeline:
 <p align="center">
   <sub>Built with ❤️ to make platform integration smooth and predictable.</sub>
 </p>
+
 
 
 
