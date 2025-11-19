@@ -3,7 +3,7 @@
 
 > CI/CD pipeline for partners to **pull**, **deploy**, and **verify** the COP-PILOT Portal using images hosted on **Harbor**.
 
-This pipeline is designed for external partners who need to deploy the portal on their own VM (connected to the COP-PILOT SIF Network).  
+This pipeline is designed for  partners who need to deploy the portal on their own VM. 
 It performs environment validation, pulls the correct Harbor image, deploys the container via Docker Compose, and finally performs a health check.
 
 ---
@@ -149,3 +149,4 @@ This allows the pipeline to inject the correct values.
 ## 📬 Support
 
 If you need help troubleshooting deployments or onboarding your VM into the COP-PILOT CI/CD infrastructure, contact the core DevOps team.
+
