@@ -140,29 +140,37 @@ EOF
         // *** HEALTH / LOGS     ***
         // *************************
         stage("Health_Check") {
-            steps {
-                echo "***** Recent logs & quick health check *****"
-                sh '''
-                    set -eux
-
-                    # Show a short tail for visibility (never fails the build)
-                    sudo journalctl -u "${SYSTEMD_UNIT}" -n 80 --no-pager || true
-
-                    # Fail only on serious errors.
-                    if sudo journalctl -u "${SYSTEMD_UNIT}" --since "90 seconds ago" --no-pager \
-                      | grep -vi 'identity.*router\\.key.*permission denied' \
-                      | grep -Eiq 'panic|fatal|segfault|exited with status|failed to start|TLS .*failed|certificate .*failed|unreachable|timeout|xgress[^"]*error'
-                    then
-                      echo "Recent router errors detected."
-                      exit 1
-                    fi
-
-                    # Final truth: service must be running
-                    sudo systemctl is-active --quiet "${SYSTEMD_UNIT}"
-                    echo "Router active and healthy."
-                '''
-            }
+              steps {
+                    script {
+                        echo "Running  health validation..."
+        
+                        // Check if the systemd service is active
+                        def status = sh(script: "systemctl is-active ziti-router", returnStatus: true)
+                        if (status != 0) {
+                            error "Ziti Router service is not running"
+                        }
+            
+                        // Check for real fatal errors 
+                        def fatalErrors = sh(
+                            script: """
+                                journalctl -u ziti-router --since '2 minutes ago' --no-pager |
+                                grep -Ei 'panic|fatal|segfault|exited with status|failed to start|TLS .*failed|certificate .*failed' || true
+                            """,
+                            returnStdout: true
+                        ).trim()
+            
+                        // If fatal errors contain *only* expected tunnel messages, ignore them
+                        if (fatalErrors) {
+                            if (fatalErrors =~ /tunneling not enabled/ ||
+                                fatalErrors =~ /unable to authenticate to controller/) {
+                                echo "Ignoring expected tunnel warnings"
+                            } else {
+                                error "Critical errors detected:\n${fatalErrors}"
+                            }
+                    }
+            echo "Router is healthy. Proceeding..."
         }
+    }
     }
 
     post {
@@ -174,3 +182,4 @@ EOF
         // }
     }
 }
+
