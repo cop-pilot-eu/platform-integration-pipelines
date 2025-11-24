@@ -168,9 +168,10 @@ EOF
                                 error "Critical errors detected:\n${fatalErrors}"
                             }
                     }
-            echo "Router is healthy. Proceeding..."
+                    echo "Router is healthy. Proceeding..."
+                }
+            }
         }
-    }
     }
 
     post {
@@ -182,5 +183,6 @@ EOF
         // }
     }
 }
+
 
 
