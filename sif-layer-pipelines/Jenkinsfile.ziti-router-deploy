@@ -6,13 +6,13 @@ pipeline {
     parameters {
         string(
             name: 'ER_NAME',
-            defaultValue: 'test-1-router',
+            defaultValue: 'test-x-router',
             description: 'Edge router name as created in CloudZiti / NF portal'
         )
 
         string(
             name: 'NODE_LABEL',
-            defaultValue: 'cop-pilot-sif',
+            defaultValue: 'clusterx-router',
             description: 'Jenkins agent label where the router will be installed'
         )
 
@@ -182,4 +182,5 @@ EOF
         // }
     }
 }
+
 
