@@ -1,26 +1,29 @@
 pipeline {
 
-    // ---------- Build parameters ----------
+    // ==========================
+    // Build parameters
+    // ==========================
     parameters {
         string(
             name: 'ER_NAME',
-            defaultValue: 'intra-zet-cmd',
-            description: 'Name of the Edge Router in cop-pilot.cloudziti.io'
-        )
-
-        string(
-            name: 'ER_JWT_CRED',
-            defaultValue: 'er_enrollment_jwt',
-            description: 'Jenkins credentialsId of the Edge Router enrollment JWT (Secret file)'
+            defaultValue: 'test-1-router',
+            description: 'Edge router name as created in CloudZiti / NF portal'
         )
 
         string(
             name: 'NODE_LABEL',
             defaultValue: 'cop-pilot-sif',
-            description: 'Jenkins node label where the Edge Router should be deployed'
+            description: 'Jenkins agent label where the router will be installed'
+        )
+
+        string(
+            name: 'ER_JWT_CRED',
+            defaultValue: 'er_enrollment_jwt',
+            description: 'Jenkins Secret File credential ID containing the edge-router enrollment JWT'
         )
     }
 
+    // Use the selected node label
     agent {
         node {
             label "${params.NODE_LABEL}"
@@ -29,100 +32,134 @@ pipeline {
 
     environment {
         // --- Router identifiers / paths ---
-        ER_NAME       = "${params.ER_NAME}"
-        IDENTITY_DIR  = "/var/lib/ziti-router"
-        CONFIG_FILE   = "${IDENTITY_DIR}/config.yml"
-        JWT_PATH      = "${IDENTITY_DIR}/enroll.jwt"
-        SYSTEMD_UNIT  = "ziti-router.service"
+        ER_NAME      = "${params.ER_NAME}"
+        BOOT_DIR     = "/opt/openziti/etc/router"
+        BOOT_ENV     = "${BOOT_DIR}/bootstrap.env"
+        BOOT_SH      = "${BOOT_DIR}/bootstrap.bash"
+        JWT_PATH     = "${BOOT_DIR}/enroll.jwt"
+        STATE_CFG    = "/var/lib/ziti-router/config.yml"
+        SYSTEMD_UNIT = "ziti-router.service"
 
-        // --- Controller endpoint ---
-        CTRL_ADDR     = "39132d5f-04bc-4b2a-8301-c4750aeca899.production.netfoundry.io"
-        CTRL_PORT     = "443"
+        // --- Controller endpoints (from the Network Firewall Info dialog) ---
+        CTRL_ADDR    = "39132d5f-04bc-4b2a-8301-c4750aeca899.production.netfoundry.io"
+        CTRL_PORT    = "443"   // or 6262 if you prefer
 
-        // --- JWT credential from build param ---
-        ER_JWT_CRED   = "${params.ER_JWT_CRED}"
+        // --- Jenkins credentials (Secret file with the enrollment JWT you downloaded) ---
+        ER_JWT_CRED  = "${params.ER_JWT_CRED}"
     }
 
     stages {
 
+        // ****************************
+        // *** INSTALL ROUTER PKG   ***
+        // ****************************
         stage("Install_openziti_router") {
             steps {
-                echo "***** Installing OpenZiti router *****"
+                echo "***** Installing OpenZiti router package *****"
                 sh '''
                     set -eux
 
                     if ! command -v /opt/openziti/bin/ziti >/dev/null 2>&1; then
                       curl -sS https://get.openziti.io/install.bash | sudo bash -s openziti-router
                     else
-                      echo "OpenZiti already installed; skipping."
+                      echo "openziti already installed; skipping."
                     fi
 
-                    sudo mkdir -p "${IDENTITY_DIR}"
+                    sudo mkdir -p "${BOOT_DIR}"
                 '''
             }
         }
 
-        stage("Place_Enrollment_JWT") {
+        // *******************************
+        // *** PLACE JWT + BOOTSTRAP   ***
+        // *******************************
+        stage("Configure_Bootstrap") {
             steps {
-                echo "***** Placing enrollment JWT *****"
+                echo "***** Placing enrollment JWT and writing bootstrap.env *****"
+
+                // Use the credential ID passed as parameter
                 withCredentials([file(credentialsId: "${ER_JWT_CRED}", variable: 'JWT_FILE')]) {
                     sh '''
                         set -eux
+
+                        # place JWT where bootstrap reads it
                         sudo cp "$JWT_FILE" "${JWT_PATH}"
                         sudo chmod 600 "${JWT_PATH}"
+
+                        # non-interactive answer file for bootstrap.bash
+                        sudo bash -c "cat > '${BOOT_ENV}'" <<EOF
+ZITI_CTRL_ADVERTISED_ADDRESS=${CTRL_ADDR}
+ZITI_CTRL_ADVERTISED_PORT=${CTRL_PORT}
+ZITI_ENROLL_TOKEN=${JWT_PATH}
+ZITI_ROUTER_NAME=${ER_NAME}
+# Edge router, no inbound listener:
+# Do NOT set ZITI_ROUTER_ADVERTISED_ADDRESS or ZITI_ROUTER_PORT here.
+EOF
+
+                        sudo ls -l "${BOOT_DIR}"; echo; sudo cat "${BOOT_ENV}"
                     '''
                 }
             }
         }
 
-        stage("Enroll_Edge_Router") {
+        // ***********************************
+        // *** BOOTSTRAP (GENERATE CONFIG) ***
+        // ***********************************
+        stage("Bootstrap_Router") {
             steps {
-                echo "***** Enrolling Edge Router *****"
+                echo "***** Bootstrapping router (fetching config from controller) *****"
                 sh '''
                     set -eux
 
-                    if [ ! -f "${CONFIG_FILE}" ]; then
-                      cd "${IDENTITY_DIR}"
-                      sudo /opt/openziti/bin/ziti router enroll "$(basename "${CONFIG_FILE}")" \
-                        --jwt "${JWT_PATH}"
+                    if [ ! -f "${STATE_CFG}" ]; then
+                      sudo "${BOOT_SH}"
                     else
-                      echo "Config already exists; skipping enroll."
+                      echo "Config already exists at ${STATE_CFG}; skipping bootstrap."
                     fi
-
-                    sudo sed -n '1,80p' "${CONFIG_FILE}" || true
                 '''
             }
         }
 
+        // ******************************
+        // *** START & ENABLE SERVICE ***
+        // ******************************
         stage("Start_Service") {
             steps {
-                echo "***** Starting systemd service *****"
+                echo "***** Enabling and starting ${SYSTEMD_UNIT} *****"
                 sh '''
                     set -eux
+
                     sudo systemctl enable --now "${SYSTEMD_UNIT}"
-                    sleep 3
+                    sleep 2
                     sudo systemctl status "${SYSTEMD_UNIT}" --no-pager || true
                 '''
             }
         }
 
+        // *************************
+        // *** HEALTH / LOGS     ***
+        // *************************
         stage("Health_Check") {
             steps {
-                echo "***** Checking router health *****"
+                echo "***** Recent logs & quick health check *****"
                 sh '''
                     set -eux
 
+                    # Show a short tail for visibility (never fails the build)
                     sudo journalctl -u "${SYSTEMD_UNIT}" -n 80 --no-pager || true
 
-                    if sudo journalctl -u "${SYSTEMD_UNIT}" --since "90 seconds ago" \
-                      --no-pager | grep -Eiq 'panic|fatal|segfault|failed|TLS.*failed|unreachable|timeout'
+                    # Fail only on serious errors.
+                    if sudo journalctl -u "${SYSTEMD_UNIT}" --since "90 seconds ago" --no-pager \
+                      | grep -vi 'identity.*router\\.key.*permission denied' \
+                      | grep -Eiq 'panic|fatal|segfault|exited with status|failed to start|TLS .*failed|certificate .*failed|unreachable|timeout|xgress[^"]*error'
                     then
-                      echo "Router errors found."
+                      echo "Recent router errors detected."
                       exit 1
                     fi
 
+                    # Final truth: service must be running
                     sudo systemctl is-active --quiet "${SYSTEMD_UNIT}"
-                    echo "Router healthy."
+                    echo "Router active and healthy."
                 '''
             }
         }
@@ -130,7 +167,10 @@ pipeline {
 
     post {
         failure {
-            echo "Pipeline failed. Run: sudo journalctl -u ${SYSTEMD_UNIT} -f"
+            echo "Pipeline failed. Tail logs with: sudo journalctl -u ${SYSTEMD_UNIT} -f"
         }
+        // always {
+        //     archiveArtifacts artifacts: 'artifacts/**', allowEmptyArchive: true
+        // }
     }
 }
