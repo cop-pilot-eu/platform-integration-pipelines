@@ -1,0 +1,220 @@
+pipeline {
+    /************************************************************
+     * PARAMETERS
+     ************************************************************/
+    parameters {
+        // Where to run the deployment (partner VM / cluster node)
+        string(
+            name: 'NODE_LABEL',
+            defaultValue: 'orionld-node',
+            description: 'Jenkins node label where Orion-LD + MongoDB will be deployed'
+        )
+
+        // Images & ports are also parameterized so you can override if needed
+        string(
+            name: 'ORION_LD_DOCKER_IMAGE',
+            defaultValue: 'fiware/orion-ld:latest',
+            description: 'Orion-LD (NGSI-LD) Context Broker Docker image'
+        )
+
+        string(
+            name: 'MONGO_DOCKER_IMAGE',
+            defaultValue: 'mongo:4.4',
+            description: 'MongoDB Docker image for Orion-LD'
+        )
+
+        string(
+            name: 'ORION_LD_PORT',
+            defaultValue: '1026',
+            description: 'Host port to expose Orion-LD on'
+        )
+
+        string(
+            name: 'MONGO_PORT',
+            defaultValue: '27017',
+            description: 'Host port to expose MongoDB on'
+        )
+    }
+
+    /************************************************************
+     * AGENT
+     ************************************************************/
+    agent {
+        label "${params.NODE_LABEL}"
+    }
+
+    /************************************************************
+     * GLOBAL OPTIONS / ENV
+     ************************************************************/
+    environment {
+        STACK_NAME   = 'cop-pilot-orionld'
+        COMPOSE_FILE = 'docker-compose.orionld.yml'
+        WORK_DIR     = 'orionld-stack'
+
+        ORION_LD_DOCKER_IMAGE = "${params.ORION_LD_DOCKER_IMAGE}"
+        MONGO_DOCKER_IMAGE    = "${params.MONGO_DOCKER_IMAGE}"
+        ORION_LD_PORT         = "${params.ORION_LD_PORT}"
+        MONGO_PORT            = "${params.MONGO_PORT}"
+    }
+
+    /************************************************************
+     * STAGES
+     ************************************************************/
+    stages {
+
+        stage('Prepare workspace') {
+            steps {
+                script {
+                    echo "Using node: ${env.NODE_NAME}"
+                    echo "Workspace: ${env.WORKSPACE}"
+                    echo "Deployment directory: ${env.WORK_DIR}"
+                }
+                sh '''
+                  mkdir -p "${WORK_DIR}"
+                '''
+            }
+        }
+
+        stage('Docker sanity check') {
+            steps {
+                sh '''
+                  echo "Checking Docker availability..."
+                  docker version
+
+                  if docker compose version >/dev/null 2>&1; then
+                    echo "Using 'docker compose'"
+                  elif docker-compose version >/dev/null 2>&1; then
+                    echo "Using 'docker-compose' (legacy CLI)"
+                  else
+                    echo "ERROR: Neither 'docker compose' nor 'docker-compose' is available." >&2
+                    exit 1
+                  fi
+                '''
+            }
+        }
+
+        stage('Prepare docker-compose (reuse or generate)') {
+            steps {
+                dir("${env.WORK_DIR}") {
+                    sh '''
+                      # If there is already a docker-compose.orionld.yml in the Jenkins
+                      # job workspace root, reuse it. Otherwise, generate one.
+                      if [ -f "../${COMPOSE_FILE}" ]; then
+                        echo "Found existing compose file at ../${COMPOSE_FILE}, reusing it."
+                        cp "../${COMPOSE_FILE}" "${COMPOSE_FILE}"
+                      else
+                        echo "No existing compose file found, generating a new one..."
+
+                        cat > "${COMPOSE_FILE}" <<EOF
+version: "3.9"
+
+services:
+  mongo:
+    image: "${MONGO_DOCKER_IMAGE}"
+    restart: unless-stopped
+    command: ["mongod", "--bind_ip_all"]
+    ports:
+      - "${MONGO_PORT}:27017"
+    volumes:
+      - mongo-data:/data/db
+
+  orion-ld:
+    image: "${ORION_LD_DOCKER_IMAGE}"
+    restart: unless-stopped
+    depends_on:
+      - mongo
+    ports:
+      - "${ORION_LD_PORT}:1026"
+    environment:
+      - ORIONLD_LOG_LEVEL=INFO
+      - ORIONLD_MONGO_HOST=mongo
+    # Orion-LD will talk to Mongo running in the 'mongo' service
+    command: ["-dbhost", "mongo"]
+
+volumes:
+  mongo-data:
+EOF
+                      fi
+
+                      echo "Final docker-compose file (${COMPOSE_FILE}):"
+                      cat "${COMPOSE_FILE}"
+                    '''
+                }
+            }
+        }
+
+        stage('Deploy Orion-LD + Mongo') {
+            steps {
+                dir("${env.WORK_DIR}") {
+                    sh '''
+                      set -e
+
+                      if docker compose version >/dev/null 2>&1; then
+                        COMPOSE_CMD="docker compose"
+                      else
+                        COMPOSE_CMD="docker-compose"
+                      fi
+
+                      echo "Pulling images..."
+                      $COMPOSE_CMD -p "${STACK_NAME}" -f "${COMPOSE_FILE}" pull
+
+                      echo "Starting stack..."
+                      $COMPOSE_CMD -p "${STACK_NAME}" -f "${COMPOSE_FILE}" up -d
+
+                      echo "Current stack status:"
+                      $COMPOSE_CMD -p "${STACK_NAME}" -f "${COMPOSE_FILE}" ps
+                    '''
+                }
+            }
+        }
+
+        stage('Smoke test: Orion-LD /version') {
+            steps {
+                sh '''
+                  set -e
+
+                  echo "Waiting for Orion-LD to become healthy on port ${ORION_LD_PORT}..."
+
+                  ATTEMPTS=30
+                  SLEEP_SECONDS=2
+                  SUCCESS=0
+
+                  for i in $(seq 1 $ATTEMPTS); do
+                    if curl -sSf "http://localhost:${ORION_LD_PORT}/version" >/dev/null 2>&1; then
+                      echo "Orion-LD is UP (attempt $i)"
+                      SUCCESS=1
+                      break
+                    fi
+                    echo "Orion-LD not ready yet (attempt $i/${ATTEMPTS}) - retrying in ${SLEEP_SECONDS}s..."
+                    sleep "${SLEEP_SECONDS}"
+                  done
+
+                  if [ "$SUCCESS" -ne 1 ]; then
+                    echo "ERROR: Orion-LD did not become healthy within the expected time." >&2
+                    echo "Docker ps:"
+                    docker ps
+                    exit 1
+                  fi
+
+                  echo "Fetching Orion-LD /version for verification:"
+                  curl -sS "http://localhost:${ORION_LD_PORT}/version" || {
+                    echo "ERROR: Failed to read /version even though port seems open." >&2
+                    exit 1
+                  }
+                '''
+            }
+        }
+    }
+
+    /************************************************************
+     * POST ACTIONS
+     ************************************************************/
+    post {
+        success {
+            echo "✅ Orion-LD (NGSI-LD) + MongoDB deployment OK on node '${params.NODE_LABEL}'."
+        }
+        failure {
+            echo "❌ Orion-LD deployment failed. Check logs above on node '${params.NODE_LABEL}'."
+        }
+    }
+}

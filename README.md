@@ -21,11 +21,37 @@ Contents:
 ---
 
 ### **`data-management-pipelines/orion-context-broker/`** 🟦  
-Pipelines for deploying and verifying **data-management components**, starting with the **Orion Context Broker**.
+Pipelines responsible for deploying and validating the **FIWARE Orion family** of context brokers.
 
-Contents:
-- `Jenkinsfile.orion-context-broker-deploy` — Deploys Orion + MongoDB stack  
-- `README-orion_context_broker_deploy.md` — Detailed documentation, parameters, stages, and health checks
+This directory now contains **two separate implementations**, one for NGSI-LD and one for NGSI-V2.
+
+---
+
+### **📁 NGSI-LD (Orion-LD)**  
+**Location:**  
+`data-management-pipelines/orion-context-broker/NGSI-LD/`
+
+Contains pipelines and documentation for deploying the **Orion-LD (NGSI-LD)** semantic context broker:
+
+- **`Jenkinsfile.orionld-context-broker-deploy`**  
+  CI/CD pipeline deploying **Orion-LD + MongoDB**, including health checks and `/version` validation.
+
+- **`README-orionld_context_broker_deploy.md`**  
+  Full documentation covering parameters, workflow stages, endpoints, testing instructions, and troubleshooting.
+
+---
+
+### **📁 NGSI-V2 (Orion)**  
+**Location:**  
+`data-management-pipelines/orion-context-broker/NGSI-V2/`
+
+Contains pipelines and documentation for deploying the **classic Orion (NGSI-V2)** context broker:
+
+- **`Jenkinsfile.orion-context-broker-deploy`**  
+  CI/CD pipeline deploying **Orion NGSI-V2 + MongoDB**, including `/version` smoke tests and validation steps.
+
+- **`README-orion_context_broker_deploy.md`**  
+  Detailed guide for NGSI-V2 deployments, parameters, stages, and health checks.
 
 ---
 
