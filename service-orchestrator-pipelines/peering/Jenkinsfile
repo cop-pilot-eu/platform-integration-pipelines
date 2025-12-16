@@ -22,7 +22,7 @@ pipeline {
     TOKEN_URL = "http://auth.multi-domain-orchestrator.cop-pilot.rid-intrasoft.eu:30081/realms/tmf/protocol/openid-connect/token"
     CLIENT_ID = "tmf-api"
 
-    MAESTRO_TMF_BASE = "http://127.0.0.1:30088"
+    MAESTRO_TMF_BASE = "http://135.181.84.48:30088"
     CREATE_ORG_PATH  = "/tmf-api/party/v4/organization"
 
     // repo-relative folder where Jenkinsfile + templates live
