@@ -25,8 +25,11 @@ pipeline {
     MAESTRO_TMF_BASE = "http://135.181.84.48:30088"
     CREATE_ORG_PATH  = "/tmf-api/party/v4/organization"
 
+    PEERING_API_BASE = "http://135.181.84.48:30093"
+    PEERING_PATH     = "/peering-api/peering"
+
     // repo-relative folder where Jenkinsfile + templates live
-    PEERING_DIR = "service-orchestrator-pipelines/peering"
+    PEERING_DIR   = "service-orchestrator-pipelines/peering"
     TEMPLATE_JSON = "templates/tmf_party_organization.json"
   }
 
@@ -149,13 +152,46 @@ HTTP_CODE=$(curl -sS -o create_org_resp.json -w "%{http_code}" -X POST "$URL" \
   --data-binary "@organization_payload.json" || true)
 
 echo "Create Organization HTTP status: ${HTTP_CODE}"
-echo "Response preview (first 400 chars):"
+echo "Response body:"
 cat create_org_resp.json || true
 echo
-echo "---- end preview ----"
+echo "---- end org response ----"
 
 if [ "$HTTP_CODE" != "201" ] && [ "$HTTP_CODE" != "200" ]; then
   echo "ERROR: Create Organization failed"
+  exit 2
+fi
+'''
+        }
+      }
+    }
+
+    stage('Start Peering Process') {
+      steps {
+        dir("${env.PEERING_DIR}") {
+          sh '''#!/usr/bin/env bash
+set -euo pipefail
+
+test -f create_org_resp.json || { echo "ERROR: create_org_resp.json not found (Stage 1 output missing)"; exit 2; }
+
+TOKEN=$(cat access_token.txt)
+URL="${PEERING_API_BASE}${PEERING_PATH}"
+echo "POST ${URL}"
+
+HTTP_CODE=$(curl -sS -o peering_resp.json -w "%{http_code}" -X POST "$URL" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/json" \
+  --data-binary "@create_org_resp.json" || true)
+
+echo "Peering HTTP status: ${HTTP_CODE}"
+echo "Peering response body:"
+cat peering_resp.json || true
+echo
+echo "---- end peering response ----"
+
+if [ "$HTTP_CODE" != "200" ] && [ "$HTTP_CODE" != "201" ] && [ "$HTTP_CODE" != "202" ]; then
+  echo "ERROR: Start Peering Process failed"
   exit 2
 fi
 '''
@@ -168,7 +204,7 @@ fi
     always {
       dir("${env.PEERING_DIR}") {
         sh '''#!/usr/bin/env bash
-rm -f access_token.txt token_body.json organization_payload.json create_org_resp.json || true
+rm -f access_token.txt token_body.json organization_payload.json create_org_resp.json peering_resp.json || true
 '''
       }
     }
