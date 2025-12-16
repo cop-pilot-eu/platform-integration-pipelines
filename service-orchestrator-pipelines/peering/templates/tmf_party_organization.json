@@ -1,0 +1,145 @@
+{
+    "@baseType": "BaseEntity",
+    "@schemaLocation": null,
+    "@type": null,
+    "href": null,
+    "name": "Openslice-dev",
+    "isHeadOffice": null,
+    "isLegalEntity": null,
+    "nameType": null,
+    "organizationType": null,
+    "tradingName": null,
+    "contactMedium": [
+        {
+            "preferred": false,
+            "validFor": {
+                "endDateTime": "2027-10-22T08:31:52.026Z",
+                "startDateTime": "2018-10-22T08:31:52.028Z"
+            },
+            "@type": "GeographicAddressContactMedium",
+            "city": "Patras",
+            "country": "Greece",
+            "postCode": "",
+            "stateOrProvince": "",
+            "street1": "",
+            "street2": ""
+        },
+        {
+            "preferred": true,
+            "validFor": {
+                "endDateTime": "2027-10-22T08:31:52.026Z",
+                "startDateTime": "2018-10-22T08:31:52.028Z"
+            },
+            "@type": "EmailContactMedium"
+        }
+    ],
+    "creditRating": [],
+    "existsDuring": null,
+    "externalReference": [],
+    "organizationChildRelationship": [],
+    "organizationIdentification": [],
+    "organizationParentRelationship": null,
+    "otherName": [],
+    "partyCharacteristic": [
+        {
+            "value": {
+                "value": "password1234",
+                "alias": null
+            },
+            "name": "EXTERNAL_TMF_API_PASSWORD",
+            "@baseType": "BaseEntity"
+        },
+        {
+            "valueType": "boolean",
+            "value": {
+                "value": "true",
+                "alias": null
+            },
+            "name": "PEERED_ORGANIZATION",
+            "@baseType": "BaseEntity"
+        },
+        {
+            "value": {
+                "value": "admin",
+                "alias": null
+            },
+            "name": "EXTERNAL_TMF_API_USERNAME",
+            "@baseType": "BaseEntity"
+        },
+        {
+            "value": {
+                "value": "/tmf-api/serviceCatalogManagement/v4/serviceCategory",
+                "alias": null
+            },
+            "name": "EXTERNAL_TMF_API_SERVICE_CATEGORY_URL",
+            "@baseType": "BaseEntity"
+        },
+        {
+            "value": {
+                "value": "http://192.168.5.160:80",
+                "alias": null
+            },
+            "name": "EXTERNAL_TMF_API_BASE_URL",
+            "@baseType": "BaseEntity"
+        },
+        {
+            "value": {
+                "value": "http://192.168.5.160:80/auth/realms/openslice/protocol/openid-connect/token",
+                "alias": null
+            },
+            "name": "EXTERNAL_TMF_API_OAUTH2_TOKEN_URI",
+            "@baseType": "BaseEntity"
+        },
+        {
+            "value": {
+                "value": "admin;read",
+                "alias": null
+            },
+            "name": "EXTERNAL_TMF_API_OAUTH2_SCOPES",
+            "@baseType": "BaseEntity"
+        },
+        {
+            "value": {
+                "value": "authOpensliceProvider",
+                "alias": null
+            },
+            "name": "EXTERNAL_TMF_API_CLIENT_REGISTRATION_ID",
+            "@baseType": "BaseEntity"
+        },
+        {
+            "value": {
+                "value": "osapiWebClientId",
+                "alias": null
+            },
+            "name": "EXTERNAL_TMF_API_OAUTH2_CLIENT_ID",
+            "@baseType": "BaseEntity"
+        },
+        {
+            "value": {
+                "value": "/tmf-api/serviceCatalogManagement/v4/serviceSpecification?type=CustomerFacingServiceSpecification",
+                "alias": null
+            },
+            "name": "EXTERNAL_TMF_API_SERVICE_CATALOG_URL",
+            "@baseType": "BaseEntity"
+        },
+        {
+            "value": {
+                "value": "K8aaS",
+                "alias": null
+            },
+            "name": "EXTERNAL_TMF_API_SERVICE_SPEC_ID",
+            "@baseType": "BaseEntity"
+        },
+        {
+            "value": {
+                "value": "secret",
+                "alias": null
+            },
+            "name": "EXTERNAL_TMF_API_OAUTH2_CLIENT_SECRET",
+            "@baseType": "BaseEntity"
+        }
+    ],
+    "relatedParty": [],
+    "status": null,
+    "taxExemptionCertificate": []
+}
