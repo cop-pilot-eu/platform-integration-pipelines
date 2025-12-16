@@ -166,6 +166,30 @@ fi
       }
     }
 
+    stage('Debug Peering Auth') {
+  steps {
+    dir("${env.PEERING_DIR}") {
+      sh '''#!/usr/bin/env bash
+set -euo pipefail
+TOKEN=$(cat access_token.txt)
+URL="${PEERING_API_BASE}${PEERING_PATH}"
+
+echo "GET $URL (debug)"
+curl -sS -D peering_headers.txt -o peering_debug_body.txt -X GET "$URL" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Accept: application/json" || true
+
+echo "---- response headers ----"
+cat peering_headers.txt || true
+echo "---- end headers ----"
+echo "---- response body ----"
+cat peering_debug_body.txt || true
+echo "---- end body ----"
+'''
+    }
+  }
+}
+
     stage('Start Peering Process') {
       steps {
         dir("${env.PEERING_DIR}") {
