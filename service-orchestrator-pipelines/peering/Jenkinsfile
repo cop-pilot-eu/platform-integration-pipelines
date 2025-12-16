@@ -150,7 +150,7 @@ HTTP_CODE=$(curl -sS -o create_org_resp.json -w "%{http_code}" -X POST "$URL" \
 
 echo "Create Organization HTTP status: ${HTTP_CODE}"
 echo "Response preview (first 400 chars):"
-head -c 400 create_org_resp.json || true
+cat create_org_resp.json || true
 echo
 echo "---- end preview ----"
 
