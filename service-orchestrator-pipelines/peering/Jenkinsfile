@@ -2,7 +2,7 @@ pipeline {
   agent { node { label 'cop-pilot-bml' } }
 
   parameters {
-    string(name: 'KC_USERNAME', defaultValue: '', description: 'Keycloak username (e.g. netcomp-admin)')
+    string(name: 'KC_USERNAME', defaultValue: '', description: 'Keycloak username')
     password(name: 'KC_PASSWORD', defaultValue: '', description: 'Keycloak password (masked)')
 
     string(name: 'TMF_PARTY_ORG', defaultValue: 'central-test-domain', description: 'Organization name to create')
