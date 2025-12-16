@@ -33,13 +33,6 @@ pipeline {
   options { timestamps() }
 
   stages {
-
-    stage('Checkout') {
-      steps {
-        checkout scm
-      }
-    }
-
     stage('Get OAuth Token') {
       steps {
         dir("${env.PEERING_DIR}") {
