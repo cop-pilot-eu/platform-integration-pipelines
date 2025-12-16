@@ -1,5 +1,5 @@
 pipeline {
-  agent { node { label 'cop-pilot-bml' } }
+  agent { node { label 'doc-vm' } }
 
   parameters {
     string(name: 'KC_USERNAME', defaultValue: '', description: 'Keycloak username')
