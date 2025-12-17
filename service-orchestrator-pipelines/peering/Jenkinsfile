@@ -27,6 +27,7 @@ pipeline {
 
     PEERING_API_BASE = "http://135.181.84.48:30093"
     PEERING_PATH     = "/peering-api/peering"
+    PEERING_ADD_PATH = "/peering-api/peering/add"
 
     // repo-relative folder where Jenkinsfile + templates live
     PEERING_DIR   = "service-orchestrator-pipelines/peering"
@@ -167,9 +168,9 @@ fi
     }
 
     stage('Debug Peering Auth') {
-  steps {
-    dir("${env.PEERING_DIR}") {
-      sh '''#!/usr/bin/env bash
+      steps {
+        dir("${env.PEERING_DIR}") {
+          sh '''#!/usr/bin/env bash
 set -euo pipefail
 TOKEN=$(cat access_token.txt)
 URL="${PEERING_API_BASE}${PEERING_PATH}"
@@ -186,9 +187,9 @@ echo "---- response body ----"
 cat peering_debug_body.txt || true
 echo "---- end body ----"
 '''
+        }
+      }
     }
-  }
-}
 
     stage('Start Peering Process') {
       steps {
@@ -222,13 +223,47 @@ fi
         }
       }
     }
+
+    stage('Add Peering') {
+      steps {
+        dir("${env.PEERING_DIR}") {
+          sh '''#!/usr/bin/env bash
+set -euo pipefail
+
+test -f create_org_resp.json || { echo "ERROR: create_org_resp.json not found (input missing)"; exit 2; }
+
+TOKEN=$(cat access_token.txt)
+URL="${PEERING_API_BASE}${PEERING_ADD_PATH}"
+echo "POST ${URL}"
+
+HTTP_CODE=$(curl -sS -o peering_add_resp.json -w "%{http_code}" -X POST "$URL" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/json" \
+  --data-binary "@create_org_resp.json" || true)
+
+echo "Peering Add HTTP status: ${HTTP_CODE}"
+echo "Peering Add response body:"
+cat peering_add_resp.json || true
+echo
+echo "---- end peering add response ----"
+
+if [ "$HTTP_CODE" != "200" ] && [ "$HTTP_CODE" != "201" ] && [ "$HTTP_CODE" != "202" ]; then
+  echo "ERROR: Add Peering failed"
+  exit 2
+fi
+'''
+        }
+      }
+    }
   }
 
   post {
     always {
       dir("${env.PEERING_DIR}") {
         sh '''#!/usr/bin/env bash
-rm -f access_token.txt token_body.json organization_payload.json create_org_resp.json peering_resp.json || true
+rm -f access_token.txt token_body.json organization_payload.json create_org_resp.json \
+      peering_resp.json peering_add_resp.json peering_headers.txt peering_debug_body.txt || true
 '''
       }
     }
