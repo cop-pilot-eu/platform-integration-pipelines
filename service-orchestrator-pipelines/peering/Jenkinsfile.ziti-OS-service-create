@@ -1,0 +1,127 @@
+pipeline {
+  agent { node { label 'doc-vm' } }   // change if your node label is different
+
+  parameters {
+    string(name: 'BASE_NAME', defaultValue: 'openslice-central-domain-2', description: 'Base name for service/config/policy names')
+    string(name: 'SERVICE_IP', defaultValue: '49.13.48.36', description: 'Backend IP to expose via Ziti')
+    string(name: 'SERVICE_PORT', defaultValue: '30735', description: 'Backend port to expose via Ziti')
+    string(name: 'HOST_IDENTITY_NAME', defaultValue: 'my-host-identity', description: 'Identity NAME that will BIND (host) this service')
+    choice(name: 'PROTOCOLS', choices: ['tcp', 'tcp,udp'], description: 'Intercept protocols')
+  }
+
+  environment {
+    ZITI_CTRL    = 'https://39132d5f-04bc-4b2a-8301-c4750aeca899-p.production.netfoundry.io:1280'
+    ZITI_ID_FILE = '/home/coppilot-admin/ziti/doc-vm.json'
+
+    // These are always the same (identities that can DIAL / see the service)
+    FIXED_DIAL_IDENTITIES = '@IFi2o73f63,@SKR9uIjfx3'
+
+    // Ensure ziti CLI is found
+    PATH = "/opt/openziti/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+  }
+
+  options { timestamps() }
+
+  stages {
+    stage('Validate parameters') {
+      steps {
+        sh '''
+          set -eu
+
+          # Port validation
+          case "${SERVICE_PORT}" in
+            ''|*[!0-9]*)
+              echo "ERROR: SERVICE_PORT must be numeric"; exit 1;;
+          esac
+          [ "${SERVICE_PORT}" -ge 1 ] && [ "${SERVICE_PORT}" -le 65535 ] || {
+            echo "ERROR: SERVICE_PORT must be 1..65535"; exit 1;
+          }
+
+          # BASE_NAME sanity
+          echo "${BASE_NAME}" | grep -Eq '^[a-zA-Z0-9][a-zA-Z0-9._-]*$' || {
+            echo "ERROR: BASE_NAME must match ^[a-zA-Z0-9][a-zA-Z0-9._-]*$"; exit 1;
+          }
+
+          command -v ziti >/dev/null 2>&1 || { echo "ERROR: ziti CLI not found"; exit 1; }
+          [ -r "${ZITI_ID_FILE}" ] || { echo "ERROR: Ziti identity file not readable: ${ZITI_ID_FILE}"; exit 1; }
+        '''
+      }
+    }
+
+    stage('Ziti login') {
+      steps {
+        sh '''
+          set -eu
+          ziti edge login "${ZITI_CTRL}" --file "${ZITI_ID_FILE}" -y
+        '''
+      }
+    }
+
+    stage('Create configs + service + policies') {
+      steps {
+        sh '''
+          set -eu
+
+          SVC_NAME="${BASE_NAME}"
+          INT_CFG="${BASE_NAME}-intercept-config"
+          HOST_CFG="${BASE_NAME}-host-config"
+          DIAL_POL="${BASE_NAME}-dial-policy"
+          BIND_POL="${BASE_NAME}-bind-policy"
+          INTERCEPT_ADDR="${BASE_NAME}.ziti"
+
+          # Convert "tcp,udp" -> ["tcp","udp"]
+          PROTO_JSON=$(echo "${PROTOCOLS}" | awk -F',' '{
+            printf("[");
+            for(i=1;i<=NF;i++){
+              printf("\\"%s\\"", $i);
+              if(i<NF) printf(",");
+            }
+            printf("]");
+          }')
+
+          echo "Creating intercept config: ${INT_CFG}"
+          ziti edge create config "${INT_CFG}" intercept.v1 "{
+            \\"portRanges\\":[{\\"high\\":${SERVICE_PORT},\\"low\\":${SERVICE_PORT}}],
+            \\"addresses\\":[\\"${INTERCEPT_ADDR}\\"],
+            \\"protocols\\":${PROTO_JSON}
+          }"
+
+          echo "Creating host config: ${HOST_CFG}"
+          ziti edge create config "${HOST_CFG}" host.v1 "{
+            \\"address\\":\\"${SERVICE_IP}\\",
+            \\"port\\":${SERVICE_PORT},
+            \\"forwardProtocol\\":true,
+            \\"allowedProtocols\\":[\\"tcp\\"]
+          }"
+
+          echo "Creating service: ${SVC_NAME}"
+          ziti edge create service "${SVC_NAME}" --configs "${INT_CFG},${HOST_CFG}"
+
+          echo "Creating dial policy (fixed identities): ${DIAL_POL}"
+          ziti edge create service-policy "${DIAL_POL}" Dial \
+            --semantic AnyOf \
+            --service-roles "@${SVC_NAME}" \
+            --identity-roles "${FIXED_DIAL_IDENTITIES}"
+
+          echo "Creating bind policy (host identity by NAME): ${BIND_POL}"
+          ziti edge create service-policy "${BIND_POL}" Bind \
+            --semantic AnyOf \
+            --service-roles "@${SVC_NAME}" \
+            --identity-roles "@${HOST_IDENTITY_NAME}"
+
+          echo ""
+          echo "✅ Done"
+          echo "Client intercept: ${INTERCEPT_ADDR}:${SERVICE_PORT}"
+          echo "Backend target  : ${SERVICE_IP}:${SERVICE_PORT}"
+          echo "Host identity   : ${HOST_IDENTITY_NAME}"
+        '''
+      }
+    }
+  }
+
+  post {
+    always {
+      sh 'echo "Pipeline finished."'
+    }
+  }
+}
