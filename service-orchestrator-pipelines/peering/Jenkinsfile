@@ -12,7 +12,7 @@ pipeline {
     string(name: 'STATE_OR_PROVINCE', defaultValue: 'Marousi', description: 'State/Province')
     string(name: 'STREET', defaultValue: 'Frangokklisias 13', description: 'Street')
 
-    string(name: 'OPENSLICE_TMF_API_URL', defaultValue: 'http://49.13.48.36:30735', description: 'OpenSlice base URL')
+    string(name: 'OPENSLICE_TMF_API_URL', defaultValue: '', description: 'OpenSlice base URL')
 
     string(name: 'OS_USERNAME', defaultValue: '', description: 'OpenSlice username')
     password(name: 'OS_PASSWORD', defaultValue: '', description: 'OpenSlice password (masked)')
