@@ -67,7 +67,7 @@ pipeline {
           HOST_CFG="${BASE_NAME}-host-config"
           DIAL_POL="${BASE_NAME}-dial-policy"
           BIND_POL="${BASE_NAME}-bind-policy"
-          INTERCEPT_ADDR="${BASE_NAME}.ziti"
+          INTERCEPT_ADDR="${SERVICE_IP}"
 
           # Convert "tcp,udp" -> ["tcp","udp"]
           PROTO_JSON=$(echo "${PROTOCOLS}" | awk -F',' '{
