@@ -14,7 +14,7 @@ pipeline {
     ZITI_ID_FILE = '/home/coppilot-admin/ziti/doc-vm.json'
 
     // These are always the same (identities that can DIAL / see the service)
-    FIXED_DIAL_IDENTITIES = '@IFi2o73f63,@SKR9uIjfx3'
+    FIXED_DIAL_IDENTITIES = '@PsugFlXf6,@IFi2o73f63,@SKR9uIjfx3'
 
     // Ensure ziti CLI is found
     PATH = "/opt/openziti/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
