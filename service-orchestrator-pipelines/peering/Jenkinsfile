@@ -10,7 +10,7 @@ pipeline {
     string(name: 'COUNTRY', defaultValue: 'Greece', description: 'Country')
     string(name: 'POST_CODE', defaultValue: '15125', description: 'Post code')
     string(name: 'STATE_OR_PROVINCE', defaultValue: 'Marousi', description: 'State/Province')
-    string(name: 'STREET', defaultValue: 'Frangokklisias 13', description: 'Street')
+    string(name: 'STREET', defaultValue: '13 Frangokklisias', description: 'Street')
 
     string(name: 'OPENSLICE_TMF_API_URL', defaultValue: '', description: 'OpenSlice base URL')
 
