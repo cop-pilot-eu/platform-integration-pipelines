@@ -132,6 +132,9 @@ token_uri = f"{base}/auth/realms/openslice/protocol/openid-connect/token"
 
 payload["name"] = os.environ["TMF_PARTY_ORG"]
 
+lat = os.environ.get("LAT", "")
+lon = os.environ.get("LON", "")
+
 for cm in payload.get("contactMedium", []):
     if cm.get("@type") == "GeographicAddressContactMedium":
         cm["city"] = os.environ["CITY"]
