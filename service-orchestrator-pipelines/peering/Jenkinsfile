@@ -12,6 +12,8 @@ pipeline {
     string(name: 'STATE_OR_PROVINCE', defaultValue: 'Marousi', description: 'State/Province')
     string(name: 'STREET', defaultValue: '13 Frangokklisias', description: 'Street')
 
+    // Optional parameter, used when an address is not feasible to geocode into latitude and longitude
+    string(name: 'LATLON', defaultValue: '', description: 'Optional Parameter: "LAT, LON" e.g. "38.038243, 23.805839"')
     string(name: 'OPENSLICE_TMF_API_URL', defaultValue: '', description: 'OpenSlice base URL')
 
     string(name: 'OS_USERNAME', defaultValue: '', description: 'OpenSlice username')
@@ -90,6 +92,32 @@ set -euo pipefail
 
 test -f "$TEMPLATE_JSON" || { echo "Missing template: $TEMPLATE_JSON"; exit 2; }
 
+#  Determine LAT/LON
+LAT=""
+LON=""
+
+if [ -n "${LATLON:-}" ]; then
+  # Expect "LAT, LON"
+  LAT="$(echo "$LATLON" | cut -d',' -f1 | xargs)"
+  LON="$(echo "$LATLON" | cut -d',' -f2 | xargs)"
+else
+  ADDR="${STREET}, ${STATE_OR_PROVINCE} ${POST_CODE}, ${COUNTRY}"
+
+  curl -sS -G "https://nominatim.openstreetmap.org/search" \
+    --data-urlencode "q=${ADDR}" \
+    --data-urlencode "format=json" \
+    --data-urlencode "limit=1" \
+    -H "Accept: application/json" \
+    -H "User-Agent: cop-pilot-jenkins/1.0" \
+    -o nominatim.json
+
+  # jq-only extraction (assumes jq exists on doc-vm)
+  LAT="$(jq -r '.[0].lat // empty' nominatim.json)"
+  LON="$(jq -r '.[0].lon // empty' nominatim.json)"
+fi
+
+export LAT LON
+
 python3 - <<'PY'
 import json, os
 
@@ -110,7 +138,8 @@ for cm in payload.get("contactMedium", []):
         cm["country"] = os.environ["COUNTRY"]
         cm["postCode"] = os.environ["POST_CODE"]
         cm["stateOrProvince"] = os.environ["STATE_OR_PROVINCE"]
-        cm["street1"] = os.environ["STREET"]
+        cm["street1"] = lat
+        cm["street2"] = lon
 
 for pc in payload.get("partyCharacteristic", []):
     n = pc.get("name")
@@ -263,7 +292,7 @@ fi
       dir("${env.PEERING_DIR}") {
         sh '''#!/usr/bin/env bash
 rm -f access_token.txt token_body.json organization_payload.json create_org_resp.json \
-      peering_resp.json peering_add_resp.json peering_headers.txt peering_debug_body.txt || true
+      peering_resp.json peering_add_resp.json peering_headers.txt peering_debug_body.txt nominatim.json || true
 '''
       }
     }
