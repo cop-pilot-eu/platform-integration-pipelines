@@ -17,12 +17,15 @@
                 "startDateTime": "2018-10-22T08:31:52.028Z"
             },
             "@type": "GeographicAddressContactMedium",
-            "city": "Patras",
-            "country": "Greece",
-            "postCode": "",
-            "stateOrProvince": "",
-            "street1": "",
-            "street2": ""
+            "characteristic": {
+                "city": "Patras",
+                "country": "Greece",
+                "postCode": "",
+                "stateOrProvince": "",
+                "street1": "",
+                "street2": "",
+                "@baseType": "BaseEntity"
+            }
         },
         {
             "preferred": true,
