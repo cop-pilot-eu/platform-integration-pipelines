@@ -137,12 +137,13 @@ lon = os.environ.get("LON", "")
 
 for cm in payload.get("contactMedium", []):
     if cm.get("@type") == "GeographicAddressContactMedium":
-        cm["city"] = os.environ["CITY"]
-        cm["country"] = os.environ["COUNTRY"]
-        cm["postCode"] = os.environ["POST_CODE"]
-        cm["stateOrProvince"] = os.environ["STATE_OR_PROVINCE"]
-        cm["street1"] = lat
-        cm["street2"] = lon
+        ch = cm.setdefault("characteristic", {})
+        ch["city"] = os.environ["CITY"]
+        ch["country"] = os.environ["COUNTRY"]
+        ch["postCode"] = os.environ["POST_CODE"]
+        ch["stateOrProvince"] = os.environ["STATE_OR_PROVINCE"]
+        ch["street1"] = lat
+        ch["street2"] = lon
 
 for pc in payload.get("partyCharacteristic", []):
     n = pc.get("name")
