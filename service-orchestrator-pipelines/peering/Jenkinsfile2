@@ -232,6 +232,29 @@ set -euo pipefail
 
 test -f create_org_resp.json || { echo "ERROR: create_org_resp.json not found (Stage 1 output missing)"; exit 2; }
 
+# Build peering payload by wrapping the org response
+python3 - <<'PY'
+import json
+
+with open("create_org_resp.json", "r", encoding="utf-8") as f:
+    org = json.load(f)
+
+payload = {
+    "organization": org, 
+    "serviceSpecs": {},
+    "peeredSpecs": {},
+    "serviceCatalogs": []
+}
+
+with open("peering_payload.json", "w", encoding="utf-8") as f:
+    json.dump(payload, f, indent=2)
+
+print("==== Peering Payload Preview ====")
+print(json.dumps(payload, indent=2))
+print("==== End Peering Payload Preview ====")
+PY
+
+
 TOKEN=$(cat access_token.txt)
 URL="${PEERING_API_BASE}${PEERING_PATH}"
 echo "POST ${URL}"
@@ -240,7 +263,7 @@ HTTP_CODE=$(curl -sS -o peering_resp.json -w "%{http_code}" -X POST "$URL" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -H "Accept: application/json" \
-  --data-binary "@create_org_resp.json" || true)
+  --data-binary "@peering_payload.json" || true)
 
 echo "Peering HTTP status: ${HTTP_CODE}"
 echo "Peering response body:"
