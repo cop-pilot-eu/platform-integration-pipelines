@@ -1,1 +1,304 @@
-Jenkins
+pipeline {
+  agent { node { label 'doc-vm' } }
+
+  parameters {
+    string(name: 'KC_USERNAME', defaultValue: '', description: 'Keycloak username')
+    password(name: 'KC_PASSWORD', defaultValue: '', description: 'Keycloak password (masked)')
+
+    string(name: 'TMF_PARTY_ORG', defaultValue: 'central-test-domain', description: 'Organization name to create')
+    string(name: 'CITY', defaultValue: 'Athens', description: 'City')
+    string(name: 'COUNTRY', defaultValue: 'Greece', description: 'Country')
+    string(name: 'POST_CODE', defaultValue: '15125', description: 'Post code')
+    string(name: 'STATE_OR_PROVINCE', defaultValue: 'Marousi', description: 'State/Province')
+    string(name: 'STREET', defaultValue: '13 Frangokklisias', description: 'Street')
+
+    // Optional parameter, used when an address is not feasible to geocode into latitude and longitude
+    string(name: 'LATLON', defaultValue: '', description: 'Optional Parameter: "LAT, LON" e.g. "38.038243, 23.805839"')
+    string(name: 'OPENSLICE_TMF_API_URL', defaultValue: '', description: 'OpenSlice base URL')
+
+    string(name: 'OS_USERNAME', defaultValue: '', description: 'OpenSlice username')
+    password(name: 'OS_PASSWORD', defaultValue: '', description: 'OpenSlice password (masked)')
+  }
+
+  environment {
+    TOKEN_URL = "http://auth.multi-domain-orchestrator.cop-pilot.rid-intrasoft.eu:30081/realms/tmf/protocol/openid-connect/token"
+    CLIENT_ID = "tmf-api"
+
+    MAESTRO_TMF_BASE = "http://135.181.84.48:30088"
+    CREATE_ORG_PATH  = "/tmf-api/party/v4/organization"
+
+    PEERING_API_BASE = "http://135.181.84.48:30093"
+    PEERING_PATH     = "/peering-api/peering"
+    PEERING_ADD_PATH = "/peering-api/peering/add"
+
+    // repo-relative folder where Jenkinsfile + templates live
+    PEERING_DIR   = "service-orchestrator-pipelines/peering"
+    TEMPLATE_JSON = "templates/tmf_party_organization.json"
+  }
+
+  options { timestamps() }
+
+  stages {
+    stage('Get OAuth Token') {
+      steps {
+        dir("${env.PEERING_DIR}") {
+          withCredentials([string(credentialsId: 'tmf_api_client_secret', variable: 'KC_CLIENT_SECRET')]) {
+            sh '''#!/usr/bin/env bash
+set -euo pipefail
+
+test -n "${KC_USERNAME}" || { echo "KC_USERNAME is empty"; exit 2; }
+test -n "${KC_PASSWORD}" || { echo "KC_PASSWORD is empty"; exit 2; }
+
+HTTP_CODE=$(curl -sS -o token_body.json -w "%{http_code}" -X POST "$TOKEN_URL" \
+  -H "Content-Type: application/x-www-form-urlencoded" \
+  -H "Accept: application/json" \
+  --data-urlencode "grant_type=password" \
+  --data-urlencode "client_id=$CLIENT_ID" \
+  --data-urlencode "client_secret=$KC_CLIENT_SECRET" \
+  --data-urlencode "username=$KC_USERNAME" \
+  --data-urlencode "password=$KC_PASSWORD" || true)
+
+echo "Token HTTP status: ${HTTP_CODE}"
+
+if [ "$HTTP_CODE" != "200" ]; then
+  echo "Token request failed. Body preview:"
+  head -c 400 token_body.json || true
+  echo
+  exit 2
+fi
+
+ACCESS_TOKEN=$(python3 - <<'PY'
+import json
+with open("token_body.json","r",encoding="utf-8",errors="replace") as f:
+    data=json.load(f)
+print(data["access_token"])
+PY
+)
+
+test -n "$ACCESS_TOKEN"
+echo "Token acquired successfully (not printing it)."
+printf "%s" "$ACCESS_TOKEN" > access_token.txt
+'''
+          }
+        }
+      }
+    }
+
+    stage('Render Organization JSON') {
+      steps {
+        dir("${env.PEERING_DIR}") {
+          sh '''#!/usr/bin/env bash
+set -euo pipefail
+
+test -f "$TEMPLATE_JSON" || { echo "Missing template: $TEMPLATE_JSON"; exit 2; }
+
+#  Determine LAT/LON
+LAT=""
+LON=""
+
+if [ -n "${LATLON:-}" ]; then
+  # Expect "LAT, LON"
+  LAT="$(echo "$LATLON" | cut -d',' -f1 | xargs)"
+  LON="$(echo "$LATLON" | cut -d',' -f2 | xargs)"
+else
+  ADDR="${STREET}, ${STATE_OR_PROVINCE} ${POST_CODE}, ${COUNTRY}"
+
+  curl -sS -G "https://nominatim.openstreetmap.org/search" \
+    --data-urlencode "q=${ADDR}" \
+    --data-urlencode "format=json" \
+    --data-urlencode "limit=1" \
+    -H "Accept: application/json" \
+    -H "User-Agent: cop-pilot-jenkins/1.0" \
+    -o nominatim.json
+
+  # jq-only extraction (assumes jq exists on doc-vm)
+  LAT="$(jq -r '.[0].lat // empty' nominatim.json)"
+  LON="$(jq -r '.[0].lon // empty' nominatim.json)"
+fi
+
+export LAT LON
+
+python3 - <<'PY'
+import json, os
+
+template_path = os.environ["TEMPLATE_JSON"]
+out_path = "organization_payload.json"
+
+with open(template_path, "r", encoding="utf-8") as f:
+    payload = json.load(f)
+
+base = os.environ["OPENSLICE_TMF_API_URL"].rstrip("/")
+token_uri = f"{base}/auth/realms/openslice/protocol/openid-connect/token"
+
+payload["name"] = os.environ["TMF_PARTY_ORG"]
+
+lat = os.environ.get("LAT", "")
+lon = os.environ.get("LON", "")
+
+for cm in payload.get("contactMedium", []):
+    if cm.get("@type") == "GeographicAddressContactMedium":
+        ch = cm.setdefault("characteristic", {})
+        ch["city"] = os.environ["CITY"]
+        ch["country"] = os.environ["COUNTRY"]
+        ch["postCode"] = os.environ["POST_CODE"]
+        ch["stateOrProvince"] = os.environ["STATE_OR_PROVINCE"]
+        ch["street1"] = lat
+        ch["street2"] = lon
+
+for pc in payload.get("partyCharacteristic", []):
+    n = pc.get("name")
+    if n == "EXTERNAL_TMF_API_PASSWORD":
+        pc.setdefault("value", {})["value"] = os.environ["OS_PASSWORD"]
+    elif n == "EXTERNAL_TMF_API_USERNAME":
+        pc.setdefault("value", {})["value"] = os.environ["OS_USERNAME"]
+    elif n == "EXTERNAL_TMF_API_BASE_URL":
+        pc.setdefault("value", {})["value"] = base
+    elif n == "EXTERNAL_TMF_API_OAUTH2_TOKEN_URI":
+        pc.setdefault("value", {})["value"] = token_uri
+
+with open(out_path, "w", encoding="utf-8") as f:
+    json.dump(payload, f, indent=2)
+
+print(f"Wrote {out_path}")
+PY
+
+echo "Payload preview (first 60 lines):"
+head -n 60 organization_payload.json
+'''
+        }
+      }
+    }
+
+    stage('Create Organization in Maestro TMF') {
+      steps {
+        dir("${env.PEERING_DIR}") {
+          sh '''#!/usr/bin/env bash
+set -euo pipefail
+
+TOKEN=$(cat access_token.txt)
+URL="${MAESTRO_TMF_BASE}${CREATE_ORG_PATH}"
+echo "POST ${URL}"
+
+HTTP_CODE=$(curl -sS -o create_org_resp.json -w "%{http_code}" -X POST "$URL" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/json" \
+  --data-binary "@organization_payload.json" || true)
+
+echo "Create Organization HTTP status: ${HTTP_CODE}"
+echo "Response body:"
+cat create_org_resp.json || true
+echo
+echo "---- end org response ----"
+
+if [ "$HTTP_CODE" != "201" ] && [ "$HTTP_CODE" != "200" ]; then
+  echo "ERROR: Create Organization failed"
+  exit 2
+fi
+'''
+        }
+      }
+    }
+
+    stage('Debug Peering Auth') {
+      steps {
+        dir("${env.PEERING_DIR}") {
+          sh '''#!/usr/bin/env bash
+set -euo pipefail
+TOKEN=$(cat access_token.txt)
+URL="${PEERING_API_BASE}${PEERING_PATH}"
+
+echo "GET $URL (debug)"
+curl -sS -D peering_headers.txt -o peering_debug_body.txt -X GET "$URL" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Accept: application/json" || true
+
+echo "---- response headers ----"
+cat peering_headers.txt || true
+echo "---- end headers ----"
+echo "---- response body ----"
+cat peering_debug_body.txt || true
+echo "---- end body ----"
+'''
+        }
+      }
+    }
+
+    stage('Start Peering Process') {
+      steps {
+        dir("${env.PEERING_DIR}") {
+          sh '''#!/usr/bin/env bash
+set -euo pipefail
+
+test -f create_org_resp.json || { echo "ERROR: create_org_resp.json not found (Stage 1 output missing)"; exit 2; }
+
+TOKEN=$(cat access_token.txt)
+URL="${PEERING_API_BASE}${PEERING_PATH}"
+echo "POST ${URL}"
+
+HTTP_CODE=$(curl -sS -o peering_resp.json -w "%{http_code}" -X POST "$URL" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/json" \
+  --data-binary "@create_org_resp.json" || true)
+
+echo "Peering HTTP status: ${HTTP_CODE}"
+echo "Peering response body:"
+cat peering_resp.json || true
+echo
+echo "---- end peering response ----"
+
+if [ "$HTTP_CODE" != "200" ] && [ "$HTTP_CODE" != "201" ] && [ "$HTTP_CODE" != "202" ]; then
+  echo "ERROR: Start Peering Process failed"
+  exit 2
+fi
+'''
+        }
+      }
+    }
+
+/*    stage('Add Peering') {
+      steps {
+        dir("${env.PEERING_DIR}") {
+          sh '''#!/usr/bin/env bash
+set -euo pipefail
+
+test -f create_org_resp.json || { echo "ERROR: create_org_resp.json not found (input missing)"; exit 2; }
+
+TOKEN=$(cat access_token.txt)
+URL="${PEERING_API_BASE}${PEERING_ADD_PATH}"
+echo "POST ${URL}"
+
+HTTP_CODE=$(curl -sS -o peering_add_resp.json -w "%{http_code}" -X POST "$URL" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/json" \
+  --data-binary "@create_org_resp.json" || true)
+
+echo "Peering Add HTTP status: ${HTTP_CODE}"
+echo "Peering Add response body:"
+cat peering_add_resp.json || true
+echo
+echo "---- end peering add response ----"
+
+if [ "$HTTP_CODE" != "200" ] && [ "$HTTP_CODE" != "201" ] && [ "$HTTP_CODE" != "202" ]; then
+  echo "ERROR: Add Peering failed"
+  exit 2
+fi
+'''
+        }
+      }
+    } */
+  }
+
+  post {
+    always {
+      dir("${env.PEERING_DIR}") {
+        sh '''#!/usr/bin/env bash
+rm -f access_token.txt token_body.json organization_payload.json create_org_resp.json \
+      peering_resp.json peering_add_resp.json peering_headers.txt peering_debug_body.txt nominatim.json || true
+'''
+      }
+    }
+  }
+}
