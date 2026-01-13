@@ -319,7 +319,7 @@ fi
       dir("${env.PEERING_DIR}") {
         sh '''#!/usr/bin/env bash
 rm -f access_token.txt token_body.json organization_payload.json create_org_resp.json \
-      peering_resp.json peering_add_resp.json peering_headers.txt peering_debug_body.txt nominatim.json || true
+      peering_resp.json peering_add_resp.json peering_headers.txt peering_debug_body.txt nominatim.json peering_payload.json || true
 '''
       }
     }
