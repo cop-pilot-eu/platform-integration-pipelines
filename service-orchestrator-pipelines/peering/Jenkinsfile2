@@ -321,7 +321,7 @@ payload["serviceCatalogs"] = [
     }
 ]
 
-# Save as a new file (so we don’t lose the original input if you want it)
+# Save as a new file (so we don’t lose the original input)
 with open("peering_payload_enriched.json", "w", encoding="utf-8") as f:
     json.dump(payload, f, indent=2)
 
@@ -329,6 +329,32 @@ print("==== Enriched Peering Payload Preview (built from peering_resp.json) ====
 print(json.dumps(payload, indent=2))
 print("==== End Enriched Preview ====")
 PY
+
+# ---- POST enriched peering payload to /peering/add ----
+test -f peering_payload_enriched.json || {
+  echo "ERROR: peering_payload_enriched.json not found"
+  exit 2
+}
+
+ADD_URL="${PEERING_API_BASE}${PEERING_ADD_PATH}"
+echo "POST ${ADD_URL}"
+
+HTTP_CODE_ADD=$(curl -sS -o peering_add_resp.json -w "%{http_code}" -X POST "$ADD_URL" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/json" \
+  --data-binary "@peering_payload_enriched.json" || true)
+
+echo "Peering ADD HTTP status: ${HTTP_CODE_ADD}"
+echo "Peering ADD response body:"
+cat peering_add_resp.json || true
+echo
+echo "---- end peering add response ----"
+
+if [ "$HTTP_CODE_ADD" != "200" ] && [ "$HTTP_CODE_ADD" != "201" ] && [ "$HTTP_CODE_ADD" != "202" ]; then
+  echo "ERROR: Peering ADD failed"
+  exit 2
+fi
 
 
 if [ "$HTTP_CODE" != "200" ] && [ "$HTTP_CODE" != "201" ] && [ "$HTTP_CODE" != "202" ]; then
@@ -339,39 +365,6 @@ fi
         }
       }
     }
-
-/*    stage('Add Peering') {
-      steps {
-        dir("${env.PEERING_DIR}") {
-          sh '''#!/usr/bin/env bash
-set -euo pipefail
-
-test -f create_org_resp.json || { echo "ERROR: create_org_resp.json not found (input missing)"; exit 2; }
-
-TOKEN=$(cat access_token.txt)
-URL="${PEERING_API_BASE}${PEERING_ADD_PATH}"
-echo "POST ${URL}"
-
-HTTP_CODE=$(curl -sS -o peering_add_resp.json -w "%{http_code}" -X POST "$URL" \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -H "Accept: application/json" \
-  --data-binary "@create_org_resp.json" || true)
-
-echo "Peering Add HTTP status: ${HTTP_CODE}"
-echo "Peering Add response body:"
-cat peering_add_resp.json || true
-echo
-echo "---- end peering add response ----"
-
-if [ "$HTTP_CODE" != "200" ] && [ "$HTTP_CODE" != "201" ] && [ "$HTTP_CODE" != "202" ]; then
-  echo "ERROR: Add Peering failed"
-  exit 2
-fi
-'''
-        }
-      }
-    } */
   }
 
   post {
