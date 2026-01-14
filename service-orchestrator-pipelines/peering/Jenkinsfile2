@@ -271,6 +271,66 @@ cat peering_resp.json || true
 echo
 echo "---- end peering response ----"
 
+# ---- Build extended payload based on peering_resp.json for adding the SPECS TO CATALOG ----
+test -f peering_resp.json || { echo "ERROR: peering_resp.json not found"; exit 2; }
+
+python3 - <<'PY'
+import json, os
+
+# peering_resp.json is expected to be an ARRAY of objects [{id,name,...}, ...]
+with open("peering_resp.json", "r", encoding="utf-8") as f:
+    resp = json.load(f)
+
+if not isinstance(resp, list):
+    raise SystemExit("ERROR: peering_resp.json is not a JSON array")
+
+service_specs = {}   # {"id":"name", ...}
+spec_names = []      # ["name1","name2",...]
+
+for obj in resp:
+    if not isinstance(obj, dict):
+        continue
+    sid = obj.get("id")
+    name = obj.get("name")
+    if sid and name:
+        service_specs[sid] = name
+        spec_names.append(name)
+
+org_name = os.environ.get("TMF_PARTY_ORG", "").strip()
+if not org_name:
+    raise SystemExit("ERROR: TMF_PARTY_ORG is empty")
+
+catalog_name = f"{org_name}-catalog"
+category_name = f"{org_name}-category"
+
+# Load the original peering_payload.json we POSTed (organization-only),
+# and enrich it using data extracted from peering_resp.json
+with open("peering_payload.json", "r", encoding="utf-8") as f:
+    payload = json.load(f)
+
+payload["serviceSpecs"] = service_specs
+payload["serviceCatalogs"] = [
+    {
+        "name": catalog_name,
+        "categories": [
+            {
+                "name": category_name,
+                "specifications": spec_names
+            }
+        ]
+    }
+]
+
+# Save as a new file (so we don’t lose the original input if you want it)
+with open("peering_payload_enriched.json", "w", encoding="utf-8") as f:
+    json.dump(payload, f, indent=2)
+
+print("==== Enriched Peering Payload Preview (built from peering_resp.json) ====")
+print(json.dumps(payload, indent=2))
+print("==== End Enriched Preview ====")
+PY
+
+
 if [ "$HTTP_CODE" != "200" ] && [ "$HTTP_CODE" != "201" ] && [ "$HTTP_CODE" != "202" ]; then
   echo "ERROR: Start Peering Process failed"
   exit 2
