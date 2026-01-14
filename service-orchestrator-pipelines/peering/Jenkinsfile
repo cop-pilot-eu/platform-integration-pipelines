@@ -6,6 +6,8 @@ pipeline {
     password(name: 'KC_PASSWORD', defaultValue: '', description: 'Keycloak password (masked)')
 
     string(name: 'TMF_PARTY_ORG', defaultValue: 'central-test-domain', description: 'Organization name to create')
+    string(name: 'SERVICE_CATALOG_NAME',defaultValue: '',description: 'Service Catalog name')
+    string(name: 'SERVICE_CATEGORY_NAME',defaultValue: '',description: 'Service Category name')
     string(name: 'CITY', defaultValue: 'Athens', description: 'City')
     string(name: 'COUNTRY', defaultValue: 'Greece', description: 'Country')
     string(name: 'POST_CODE', defaultValue: '15125', description: 'Post code')
@@ -300,8 +302,8 @@ org_name = os.environ.get("TMF_PARTY_ORG", "").strip()
 if not org_name:
     raise SystemExit("ERROR: TMF_PARTY_ORG is empty")
 
-catalog_name = f"{org_name}-catalog"
-category_name = f"{org_name}-category"
+catalog_name = os.environ["SERVICE_CATALOG_NAME"]
+category_name = os.environ["SERVICE_CATEGORY_NAME"]
 
 # Load the original peering_payload.json we POSTed (organization-only),
 # and enrich it using data extracted from peering_resp.json
