@@ -8,11 +8,11 @@ pipeline {
     string(name: 'TMF_PARTY_ORG', defaultValue: 'central-test-domain', description: 'Organization name to create')
     string(name: 'SERVICE_CATALOG_NAME',defaultValue: '',description: 'Service Catalog name')
     string(name: 'SERVICE_CATEGORY_NAME',defaultValue: '',description: 'Service Category name')
-    string(name: 'CITY', defaultValue: 'Athens', description: 'City')
-    string(name: 'COUNTRY', defaultValue: 'Greece', description: 'Country')
-    string(name: 'POST_CODE', defaultValue: '15125', description: 'Post code')
-    string(name: 'STATE_OR_PROVINCE', defaultValue: 'Marousi', description: 'State/Province')
-    string(name: 'STREET', defaultValue: '13 Frangokklisias', description: 'Street')
+    string(name: 'CITY', defaultValue: '', description: 'City')
+    string(name: 'COUNTRY', defaultValue: '', description: 'Country')
+    string(name: 'POST_CODE', defaultValue: '', description: 'Post code')
+    string(name: 'STATE_OR_PROVINCE', defaultValue: '', description: 'State/Province')
+    string(name: 'STREET', defaultValue: '', description: 'Street')
 
     // Optional parameter, used when an address is not feasible to geocode into latitude and longitude
     string(name: 'LATLON', defaultValue: '', description: 'Optional Parameter: "LAT, LON" e.g. "38.038243, 23.805839"')
