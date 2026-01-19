@@ -2,8 +2,8 @@ pipeline {
   agent { node { label 'doc-vm' } }
 
   parameters {
-    string(name: 'KC_USERNAME', defaultValue: '', description: 'Keycloak username')
-    password(name: 'KC_PASSWORD', defaultValue: '', description: 'Keycloak password (masked)')
+    string(name: 'KC_USERNAME', defaultValue: '', description: 'Maestro username')
+    password(name: 'KC_PASSWORD', defaultValue: '', description: 'Maestro password (masked)')
 
     string(name: 'TMF_PARTY_ORG', defaultValue: 'central-test-domain', description: 'Organization name to create')
     string(name: 'SERVICE_CATALOG_NAME',defaultValue: '',description: 'Service Catalog name')
