@@ -289,11 +289,24 @@ if not isinstance(resp, list):
 service_specs = {}   # {"id":"name", ...}
 spec_names = []      # ["name1","name2",...]
 
+# Services that we do not want to peer with Maestro
+EXCLUDE_NAME = "A GST(NEST) Service Example"
+EXCLUDE_TYPE = "ResourceFacingServiceSpecification"
+
 for obj in resp:
     if not isinstance(obj, dict):
         continue
-    sid = obj.get("id")
+
     name = obj.get("name")
+    typ  = obj.get("@type")
+    sid  = obj.get("id")
+
+    # filters
+    if name == EXCLUDE_NAME:
+        continue
+    if typ == EXCLUDE_TYPE:
+        continue
+
     if sid and name:
         service_specs[sid] = name
         spec_names.append(name)
