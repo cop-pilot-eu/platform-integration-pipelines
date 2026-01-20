@@ -108,7 +108,6 @@ need to be changed** unless endpoints change.
 
 -   Authenticates using **Resource Owner Password Grant**
 -   Retrieves OAuth2 access token
--   Stores token temporarily in `access_token.txt`
 
 ------------------------------------------------------------------------
 
@@ -147,10 +146,7 @@ need to be changed** unless endpoints change.
 
 ## 🧹 Post Actions (Cleanup)
 
--   Removes OAuth tokens
 -   Deletes temporary JSON files
--   Ensures no sensitive data remains on disk
-
 ------------------------------------------------------------------------
 
 ## ✅ Expected Outcome
