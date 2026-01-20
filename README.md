@@ -154,14 +154,3 @@ When adding a new pipeline:
 -   ✅ Prefer idempotent pipelines
 -   ✅ Always include health checks and clear failure messages
 
-------------------------------------------------------------------------
-
-```{=html}
-<p align="center">
-```
-`<sub>`{=html}Built with ❤️ to make platform integration predictable,
-secure, and scalable.`</sub>`{=html}
-```{=html}
-</p>
-```
-
