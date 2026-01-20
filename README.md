@@ -74,7 +74,7 @@ parameters, and validation steps
 **Path:** `service-orchestrator-pipelines/peering/`
 
 Pipelines responsible for **TMF organization onboarding and service
-peering** between Maestro and external domains (e.g. OpenSlice).
+peering** between Maestro and OpenSlice.
 
 **Contents:** - `Jenkinsfile` --- Main peering pipeline (organization
 creation, peering initiation, catalog enrichment) - `Jenkinsfile-v1` ---
@@ -164,3 +164,4 @@ secure, and scalable.`</sub>`{=html}
 ```{=html}
 </p>
 ```
+
