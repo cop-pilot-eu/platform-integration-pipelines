@@ -4,12 +4,13 @@
 
 This Jenkins pipeline automates the **creation of a TMF Organization in
 Maestro** and the **initialization of the peering process** between
-Maestro and an  OpenSlice domain through ZITI.\
+Maestro and an external OpenSlice domain.\
 It also enriches Maestro with **service specifications**, **service
 catalogs**, and **service categories** derived from the peering
 response.
 
-The pipeline is designed for the **COP-PILOT platform integration**. 
+The pipeline is designed for the **COP-PILOT platform integration** and
+runs on the Jenkins agent labeled **`doc-vm`**.
 
 ------------------------------------------------------------------------
 
@@ -45,6 +46,8 @@ The pipeline is designed for the **COP-PILOT platform integration**.
   `KC_USERNAME`   Maestro (Keycloak) username
   `KC_PASSWORD`   Maestro (Keycloak) password (masked)
 
+------------------------------------------------------------------------
+
 ### Organization & Catalog Metadata
 
   Parameter                 Description
@@ -58,11 +61,15 @@ The pipeline is designed for the **COP-PILOT platform integration**.
   `STATE_OR_PROVINCE`       State or province
   `STREET`                  Street address
 
+------------------------------------------------------------------------
+
 ### Geolocation
 
   Parameter   Description
   ----------- ----------------------------------------------------------
   `LATLON`    Optional `"LAT, LON"` pair (skips geocoding if provided)
+
+------------------------------------------------------------------------
 
 ### OpenSlice Integration
 
@@ -79,14 +86,14 @@ The pipeline is designed for the **COP-PILOT platform integration**.
 These values are defined directly in the pipeline and normally **do not
 need to be changed** unless endpoints change.
 
--   `TOKEN_URL` -- OAuth2 token endpoint
--   `CLIENT_ID` -- OAuth2 client ID (`tmf-api`)
--   `MAESTRO_TMF_BASE` -- Maestro TMF API base URL
--   `CREATE_ORG_PATH` -- TMF Organization creation path
--   `PEERING_API_BASE` -- Maestro Peering API base URL
--   `PEERING_PATH` -- Start peering endpoint
--   `PEERING_ADD_PATH` -- Add peering details endpoint
--   `PEERING_DIR` -- Repository-relative pipeline directory
+-   `TOKEN_URL` -- OAuth2 token endpoint\
+-   `CLIENT_ID` -- OAuth2 client ID (`tmf-api`)\
+-   `MAESTRO_TMF_BASE` -- Maestro TMF API base URL\
+-   `CREATE_ORG_PATH` -- TMF Organization creation path\
+-   `PEERING_API_BASE` -- Maestro Peering API base URL\
+-   `PEERING_PATH` -- Start peering endpoint\
+-   `PEERING_ADD_PATH` -- Add peering details endpoint\
+-   `PEERING_DIR` -- Repository-relative pipeline directory\
 -   `TEMPLATE_JSON` -- Organization JSON template
 
 ------------------------------------------------------------------------
