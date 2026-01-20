@@ -53,13 +53,13 @@ runs on the Jenkins agent labeled **`doc-vm`**.
   **Parameter**             **Description**
   ------------------------- --------------------------------------------
   `TMF_PARTY_ORG`           Organization name to be created in Maestro  
-  `SERVICE_CATALOG_NAME`    Name of the Service Catalog to create
-  `SERVICE_CATEGORY_NAME`   Name of the Service Category
-  `CITY`                    Organization city
-  `COUNTRY`                 Organization country
-  `POST_CODE`               Postal code
-  `STATE_OR_PROVINCE`       State or province
-  `STREET`                  Street address
+  `SERVICE_CATALOG_NAME`    Name of the Service Catalog to create  
+  `SERVICE_CATEGORY_NAME`   Name of the Service Category  
+  `CITY`                    Organization city  
+  `COUNTRY`                 Organization country  
+  `POST_CODE`               Postal code  
+  `STATE_OR_PROVINCE`       State or province  
+  `STREET`                  Street address  
 
 ------------------------------------------------------------------------
 
@@ -79,8 +79,8 @@ runs on the Jenkins agent labeled **`doc-vm`**.
 
   **Parameter**             **Description**
   ------------------------- -----------------------------------
-  `OPENSLICE_TMF_API_URL`   Base URL of the OpenSlice TMF API
-  `OS_USERNAME`             OpenSlice username
+  `OPENSLICE_TMF_API_URL`   Base URL of the OpenSlice TMF API  
+  `OS_USERNAME`             OpenSlice username  
   `OS_PASSWORD`             OpenSlice password *(masked)*
 
 ------------------------------------------------------------------------
