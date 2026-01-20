@@ -1,119 +1,166 @@
 # 🚀 Platform Integration Pipelines
 
-> A curated set of **CI/CD pipelines** for integrating, deploying, and validating the platform architecture components.  
-> Automate installs, configuration, and end‑to‑end checks for **seamless interoperability** across the stack.
+> A curated set of **CI/CD pipelines** for integrating, deploying, and
+> validating platform architecture components.\
+> The repository automates installation, configuration, and end‑to‑end
+> checks to ensure **seamless interoperability** across the COP‑PILOT
+> stack.
 
----
+------------------------------------------------------------------------
 
 ## 🗂️ Repository Structure
 
-The repository is organized by component layers. Each folder contains pipelines specific to that part of the architecture.
+The repository is organized by **platform layers and components**.\
+Each folder is self‑contained and includes its own pipelines and
+documentation.
 
----
+------------------------------------------------------------------------
 
-### **`sif-layer-pipelines/ziti-router-deploy/`** ✳️  
-Pipelines responsible for deploying, configuring, and validating the **SIF Layer**.
+## 🟩 COP‑PILOT Portal Pipelines
 
-Contents:
-- `Jenkinsfile.ziti-router-deploy` — Deploy & validate an OpenZiti Edge Router  
-- `README.md` — Component-level documentation & usage guide
+**Path:** `cop-pilot-portal-pipelines/`
 
----
+Pipelines responsible for deploying and validating the **COP‑PILOT
+Portal**.
 
-### **`data-management-pipelines/orion-context-broker/`** 🟦  
-Pipelines responsible for deploying and validating the **FIWARE Orion family** of context brokers.
+**Contents:** - `Jenkinsfile.cop-pilot-portal-deploy` --- Pulls the
+Portal image from Harbor, deploys it, and performs smoke tests -
+`README-cop-pilot-portal-deploy.md` --- Pipeline parameters, stages, and
+validation steps - `docker-compose.yml` --- Docker Compose file used by
+the deployment pipeline
 
-This directory now contains **two separate implementations**, one for NGSI-LD and one for NGSI-V2.
+------------------------------------------------------------------------
 
----
+## 🟦 Data Management Pipelines -- Orion Context Broker
 
-### **📁 NGSI-LD (Orion-LD)**  
-**Location:**  
-`data-management-pipelines/orion-context-broker/NGSI-LD/`
+**Path:** `data-management-pipelines/orion-context-broker/`
 
-Contains pipelines and documentation for deploying the **Orion-LD (NGSI-LD)** semantic context broker:
+Pipelines responsible for deploying and validating **FIWARE Orion
+Context Brokers**.\
+This directory contains **two distinct implementations**:
 
-- **`Jenkinsfile.orionld-context-broker-deploy`**  
-  CI/CD pipeline deploying **Orion-LD + MongoDB**, including health checks and `/version` validation.
+------------------------------------------------------------------------
 
-- **`README-orionld_context_broker_deploy.md`**  
-  Full documentation covering parameters, workflow stages, endpoints, testing instructions, and troubleshooting.
+### 📁 NGSI‑LD (Orion‑LD)
 
----
+**Path:** `data-management-pipelines/orion-context-broker/NGSI-LD/`
 
-### **📁 NGSI-V2 (Orion)**  
-**Location:**  
-`data-management-pipelines/orion-context-broker/NGSI-V2/`
+Pipelines and documentation for deploying the **Orion‑LD (NGSI‑LD)**
+semantic context broker.
 
-Contains pipelines and documentation for deploying the **classic Orion (NGSI-V2)** context broker:
+**Contents:** - `Jenkinsfile.orionld-context-broker-deploy` --- Deploys
+Orion‑LD and MongoDB with health checks -
+`README-orionld_context_broker_deploy.md` --- Parameters, pipeline
+stages, endpoints, and troubleshooting
 
-- **`Jenkinsfile.orion-context-broker-deploy`**  
-  CI/CD pipeline deploying **Orion NGSI-V2 + MongoDB**, including `/version` smoke tests and validation steps.
+------------------------------------------------------------------------
 
-- **`README-orion_context_broker_deploy.md`**  
-  Detailed guide for NGSI-V2 deployments, parameters, stages, and health checks.
+### 📁 NGSI‑V2 (Classic Orion)
 
----
+**Path:** `data-management-pipelines/orion-context-broker/NGSI-V2/`
 
-### **`cop-pilot-portal-pipelines/`** 🟩  
-Pipelines dedicated to deploying the **COP-PILOT Portal** 
+Pipelines and documentation for deploying the **classic Orion
+(NGSI‑V2)** context broker.
 
-**Contents:**
-- `Jenkinsfile.cop-pilot-portal-deploy` — Pulls Harbor image, deploys the Portal, and performs smoke tests  
-- `README-cop-pilot-portal-deploy.md` — Full component-level documentation with parameter descriptions  
-- `docker-compose.yml` — Compose file used by the deployment pipeline
+**Contents:** - `Jenkinsfile.orion-context-broker-deploy` --- Deploys
+Orion NGSI‑V2 and MongoDB with smoke tests -
+`README-orion_context_broker_deploy.md` --- Deployment guide,
+parameters, and validation steps
 
----
+------------------------------------------------------------------------
 
-## 📘 Documentation
+## 🟨 Service Orchestrator Pipelines -- Peering
 
-This **global README** gives an overview of the repository and its structure.  
-Every component folder ships its own **README.md** describing:
+**Path:** `service-orchestrator-pipelines/peering/`
 
-- 🎯 **Purpose** of the pipeline  
-- ⚙️ **Steps** it executes  
-- ▶️ **How to run** and **test** it
+Pipelines responsible for **TMF organization onboarding and service
+peering** between Maestro and external domains (e.g. OpenSlice).
 
----
+**Contents:** - `Jenkinsfile` --- Main peering pipeline (organization
+creation, peering initiation, catalog enrichment) - `Jenkinsfile-v1` ---
+Legacy / previous version of the peering pipeline - `templates/` --- TMF
+JSON templates used by the pipeline - `README.md` --- Detailed
+documentation of the peering workflow, parameters, and API interactions
+
+------------------------------------------------------------------------
+
+## 🟪 SIF Layer Pipelines
+
+**Path:** `sif-layer-pipelines/`
+
+Pipelines related to the **Secure Interconnection Fabric (SIF)** layer,
+based on OpenZiti.
+
+------------------------------------------------------------------------
+
+### 📁 Ziti Identity & Utilities
+
+**Path:** `sif-layer-pipelines/identity-script/`
+
+Utility scripts and documentation for Ziti identity management.
+
+**Contents:** - `README.md` --- Usage instructions -
+`ziti_install_error_and_tunnel.sh` --- Helper script for Ziti
+installation and tunneling issues
+
+------------------------------------------------------------------------
+
+### 📁 Ziti Edge Router Deployment
+
+**Path:** `sif-layer-pipelines/`
+
+Pipelines for deploying and managing **OpenZiti Edge Routers**.
+
+**Contents:** - `Jenkinsfile.ziti-router-deploy` --- Deploys and
+validates an OpenZiti Edge Router - `Jenkinsfile.ziti-OS-service-create`
+--- Creates OpenZiti services for OpenSlice -
+`OpenSlice-service-creation.md` --- Documentation for OpenSlice service
+onboarding - `Edge-Router-README.md` --- Edge Router deployment and
+operational notes - `README.md` --- SIF layer overview and usage -
+`LICENSE` --- Repository license
+
+------------------------------------------------------------------------
+
+## 📘 Documentation Philosophy
+
+-   This **global README** provides a structural overview of the
+    repository
+-   Each component directory contains its own **README.md** describing:
+    -   🎯 Pipeline purpose
+    -   ⚙️ Parameters and configuration
+    -   ▶️ Execution flow
+    -   🧪 Validation and testing steps
+
+------------------------------------------------------------------------
 
 ## 🤝 Contribution Guidelines
 
 When adding a new pipeline:
 
-1. 📁 **Create** a folder for the component (if it doesn’t already exist).  
-2. 🧩 **Add** your pipeline file(s), e.g. `Jenkinsfile.<name>`.  
-3. 📝 **Document** the pipeline in a `README.md` inside that folder.  
-4. 🧭 **Update** this global README with a short entry describing the new folder.
+1.  📁 Create a folder for the component (if not already present)
+2.  🧩 Add pipeline files (`Jenkinsfile.<name>`)
+3.  📝 Document the pipeline in a local `README.md`
+4.  🧭 Update this global README with a short description
 
-> Tip: Keep docs concise and consistent—small examples and copy‑paste snippets help reviewers and users.
+> Keep documentation concise, consistent, and focused on
+> reproducibility.
 
----
-
-## 🧭 Why this structure?
-
-- 🧱 **Scalable** – add new layers/components without reworking the repo.  
-- 🧼 **Clear** – each component is self‑contained and documented.  
-- 🧰 **Maintainable** – standard layout simplifies reviews and automation.
-
----
-
+------------------------------------------------------------------------
 
 ## 📌 Conventions
 
-- ✅ Use `Jenkinsfile.<pipeline-name>` for pipeline files.  
-- ✅ Keep secrets out of source—use Jenkins credentials and withCredentials blocks.  
-- ✅ Prefer idempotent tasks so reruns are safe.  
-- ✅ Add health checks and clear failure messages at the end of pipelines.
+-   ✅ Use `Jenkinsfile.<pipeline-name>` naming
+-   ✅ Never commit secrets --- use Jenkins credentials
+-   ✅ Prefer idempotent pipelines
+-   ✅ Always include health checks and clear failure messages
 
----
+------------------------------------------------------------------------
 
+```{=html}
 <p align="center">
-  <sub>Built with ❤️ to make platform integration smooth and predictable.</sub>
+```
+`<sub>`{=html}Built with ❤️ to make platform integration predictable,
+secure, and scalable.`</sub>`{=html}
+```{=html}
 </p>
-
-
-
-
-
-
-
+```
