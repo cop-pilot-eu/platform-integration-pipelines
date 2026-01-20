@@ -4,13 +4,12 @@
 
 This Jenkins pipeline automates the **creation of a TMF Organization in
 Maestro** and the **initialization of the peering process** between
-Maestro and an external OpenSlice domain.\
+Maestro and an  OpenSlice domain through ZITI.\
 It also enriches Maestro with **service specifications**, **service
 catalogs**, and **service categories** derived from the peering
 response.
 
-The pipeline is designed for the **COP-PILOT platform integration** and
-runs on the Jenkins agent labeled **`doc-vm`**.
+The pipeline is designed for the **COP-PILOT platform integration** 
 
 ------------------------------------------------------------------------
 
