@@ -43,7 +43,7 @@ runs on the Jenkins agent labeled **`doc-vm`**.
 
   **Parameter**   **Description**
   --------------- ----------------------------------------
-  `KC_USERNAME`   Maestro (Keycloak) username
+  `KC_USERNAME`   Maestro (Keycloak) username  
   `KC_PASSWORD`   Maestro (Keycloak) password *(masked)*
 
 ------------------------------------------------------------------------
@@ -52,7 +52,7 @@ runs on the Jenkins agent labeled **`doc-vm`**.
 
   **Parameter**             **Description**
   ------------------------- --------------------------------------------
-  `TMF_PARTY_ORG`           Organization name to be created in Maestro
+  `TMF_PARTY_ORG`           Organization name to be created in Maestro  
   `SERVICE_CATALOG_NAME`    Name of the Service Catalog to create
   `SERVICE_CATEGORY_NAME`   Name of the Service Category
   `CITY`                    Organization city
