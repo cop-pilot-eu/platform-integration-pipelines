@@ -40,31 +40,6 @@ All objects are derived from the provided `BASE_NAME`.
 
 ------------------------------------------------------------------------
 
-## ✅ Requirements
-
--   Jenkins agent with label **`doc-vm`**
-
--   OpenZiti CLI installed at:
-
-        /opt/openziti/bin
-
-    (automatically added to `PATH` by the pipeline)
-
--   A valid Ziti identity file on the agent:
-
-        ZITI_ID_FILE=/home/coppilot-admin/ziti/doc-vm.json
-
-🔑 The identity referenced by `ZITI_ID_FILE` must have permissions to
-create:
-
--   configs
--   services
--   service-policies
-
-within the Ziti controller.
-
-------------------------------------------------------------------------
-
 ## ⚙️ Pipeline Parameters
 
   -----------------------------------------------------------------------------------------
