@@ -9,7 +9,7 @@ It also enriches Maestro with **service specifications**, **service
 catalogs**, and **service categories** derived from the peering
 response.
 
-The pipeline is designed for the **COP-PILOT platform integration** 
+The pipeline is designed for the **COP-PILOT platform integration**. 
 
 ------------------------------------------------------------------------
 
