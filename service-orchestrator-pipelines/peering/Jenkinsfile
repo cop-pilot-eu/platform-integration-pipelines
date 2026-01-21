@@ -290,8 +290,18 @@ service_specs = {}   # {"id":"name", ...}
 spec_names = []      # ["name1","name2",...]
 
 # Services that we do not want to peer with Maestro
-EXCLUDE_NAME = "A GST(NEST) Service Example"
-EXCLUDE_TYPE = "ResourceFacingServiceSpecification"
+EXCLUDE_NAMES = {
+    "A GST(NEST) Service Example",
+    "Calculator Service",
+    "Jenkins Service",
+    "Test Web App",
+    "Register IMSIs to QoS",
+    "CAPIF exposed service",
+}
+
+EXCLUDE_TYPES = {
+    "ResourceFacingServiceSpecification",
+}
 
 for obj in resp:
     if not isinstance(obj, dict):
@@ -302,15 +312,15 @@ for obj in resp:
     sid  = obj.get("id")
 
     # filters
-    if name == EXCLUDE_NAME:
+    if name in EXCLUDE_NAMES:
         continue
-    if typ == EXCLUDE_TYPE:
+    if typ in EXCLUDE_TYPES:
         continue
 
     if sid and name:
         service_specs[sid] = name
         spec_names.append(name)
-
+        
 org_name = os.environ.get("TMF_PARTY_ORG", "").strip()
 if not org_name:
     raise SystemExit("ERROR: TMF_PARTY_ORG is empty")
