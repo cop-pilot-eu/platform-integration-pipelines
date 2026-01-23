@@ -45,7 +45,7 @@ chmod +x ziti_install_enroll_and_tunnel.sh
 Run the script, passing the JWT filename as input:
 
 ```bash
-./ziti_install_enroll_and_tunnel.sh OpenSlice-central-domain.jwt --nohup
+./ziti_install_enroll_and_tunnel.sh OpenSlice-central-domain.jwt 
 ```
 
 ---
