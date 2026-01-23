@@ -20,6 +20,7 @@ set -euo pipefail
 # Output:
 #   ./OpenSlice-central-domain.json
 # ------------------------------------------------------------
+# reenable: sudo nohup /usr/local/bin/ziti-edge-tunnel run -i openslice.json > ziti-openslice.log 2>&1 &
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
