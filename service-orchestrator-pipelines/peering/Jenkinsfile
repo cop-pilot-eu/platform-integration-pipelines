@@ -297,6 +297,8 @@ EXCLUDE_NAMES = {
     "Test Web App",
     "Register IMSIs to QoS",
     "CAPIF exposed service",
+    "NGINX in K8s",
+    "NGINX in K3s",
 }
 
 EXCLUDE_TYPES = {
