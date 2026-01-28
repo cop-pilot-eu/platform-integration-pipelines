@@ -299,6 +299,7 @@ EXCLUDE_NAMES = {
     "CAPIF exposed service",
     "NGINX in K8s",
     "NGINX in K3s",
+    "K8aaS"
 }
 
 EXCLUDE_TYPES = {
