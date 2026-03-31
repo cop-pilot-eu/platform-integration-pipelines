@@ -8,70 +8,73 @@ pipeline {
     parameters {
         string(
             name: 'AGENT_LABEL',
-            defaultValue: 'partner-node',
+            defaultValue: 'dev00',
             description: 'Jenkins node label where this pipeline will run'
         )
         string(
             name: 'DOCKER_TAG',
             defaultValue: 'latest',
-            description: 'Image tag from Harbor to deploy (e.g. 0.1.15 or latest)'
+            description: 'Image tag to deploy (e.g. latest, 0.1.5)'
+        )
+        booleanParam(
+            name: 'SEED_ADMIN',
+            defaultValue: true,
+            description: 'Seed an initial admin user after deployment'
+        )
+        string(
+            name: 'ADMIN_EMAIL',
+            defaultValue: 'admin@example.com',
+            description: 'Email for the seeded admin user'
+        )
+        password(
+            name: 'ADMIN_PASSWORD',
+            defaultValue: 'ChangeMe123!',
+            description: 'Password for the seeded admin user'
+        )
+        string(
+            name: 'TMF_BASE_URL',
+            defaultValue: '',
+            description: 'Base URL of the TM Forum API gateway (optional)'
+        )
+        string(
+            name: 'TMF_API_KEY',
+            defaultValue: '',
+            description: 'Bearer token for TMF requests (optional)'
+        )
+        string(
+            name: 'LLM_ASSISTANT_ENDPOINT',
+            defaultValue: '',
+            description: 'External LLM assistant endpoint (optional)'
+        )
+        password(
+            name: 'LLM_ASSISTANT_API_KEY',
+            defaultValue: '',
+            description: 'Bearer token for the assistant endpoint (optional)'
         )
     }
 
     environment {
-        APP_NAME         = "cop-pilot-portal"              // same as in docker-compose
-        DOCKER_REG       = "harbor.cop-pilot.rid-intrasoft.eu"
-        DOCKER_REPO      = "/cop-pilot-portal/"            // Harbor project/repository
-        DOCKER_REG_CREDS = "harbor-creds"                  // Jenkins credentials ID
+        APP_NAME            = "cop-pilot-portal"
+        DOCKER_REG          = "harbor.cop-pilot.rid-intrasoft.eu"
+        DOCKER_REPO         = "/cop-pilot-portal/"
+        DOCKER_REG_CREDS    = "harbor-creds"
+        BETTER_AUTH_SECRET  = credentials('cop-pilot-portal-auth-secret')
+        BETTER_AUTH_URL     = "http://localhost:3000"
     }
 
     stages {
 
-        // ******************************
-        // *** CHECK ENV / COMPOSE    ***
-        // ******************************
-        stage("Check_Repo_Layout") {
+        // **************************
+        // *** Pull Image          ***
+        // **************************
+        stage("Pull_Image") {
             steps {
-                echo "***** Checking docker-compose.yml and .env *****"
-                sh '''
-                    set -e
-                    if [ ! -f docker-compose.yml ] && [ ! -f compose.yml ] && [ ! -f docker-compose.yaml ]; then
-                      echo "ERROR: No docker-compose file found in workspace"
-                      exit 1
-                    fi
-
-                    if [ ! -f .env ]; then
-                      echo "WARNING: .env file is missing in workspace (compose may still use defaults)"
-                    else
-                      echo ".env file found."
-                    fi
-                '''
-            }
-        }
-
-        // ******************************
-        // *** PULL IMAGE FROM HARBOR ***
-        // ******************************
-        stage("Pull_Image_From_Harbor") {
-            steps {
-                withCredentials([[
-                    $class: 'UsernamePasswordMultiBinding',
-                    credentialsId: "${DOCKER_REG_CREDS}",
-                    usernameVariable: 'USERNAME',
-                    passwordVariable: 'PASSWORD'
-                ]]) {
-                    echo "***** Login to Harbor and pull image *****"
+                withCredentials([[$class: 'UsernamePasswordMultiBinding', credentialsId: "${DOCKER_REG_CREDS}", usernameVariable: 'USERNAME', passwordVariable: 'PASSWORD']]) {
+                    echo "***** Pulling ${APP_NAME}:${DOCKER_TAG} from Harbor *****"
                     sh '''
                         set -e
-                        echo "Using image: ${DOCKER_REG}${DOCKER_REPO}${APP_NAME}:${DOCKER_TAG}"
                         docker login ${DOCKER_REG} -u ${USERNAME} -p ${PASSWORD}
-
-                        # Let docker compose resolve the image name using our env vars
-                        DOCKER_TAG=${DOCKER_TAG} \
-                        DOCKER_REG=${DOCKER_REG} \
-                        DOCKER_REPO=${DOCKER_REPO} \
-                        APP_NAME=${APP_NAME} \
-                        docker compose pull
+                        docker pull ${DOCKER_REG}${DOCKER_REPO}${APP_NAME}:${DOCKER_TAG}
                     '''
                 }
             }
@@ -82,41 +85,55 @@ pipeline {
         // **************
         stage("Deployment") {
             steps {
-                echo "***** Deploying portal with docker compose *****"
+                echo "***** Deploy Application *****"
                 sh '''
                     set -e
-                    DOCKER_TAG=${DOCKER_TAG} \
-                    DOCKER_REG=${DOCKER_REG} \
-                    DOCKER_REPO=${DOCKER_REPO} \
-                    APP_NAME=${APP_NAME} \
+                    HOST_URL=$(hostname -I | awk '{print $1}')
+                    export BETTER_AUTH_URL="http://${HOST_URL}:3000"
+                    export TMF_BASE_URL="${TMF_BASE_URL}"
+                    export TMF_API_KEY="${TMF_API_KEY}"
+                    export LLM_ASSISTANT_ENDPOINT="${LLM_ASSISTANT_ENDPOINT}"
+                    export LLM_ASSISTANT_API_KEY="${LLM_ASSISTANT_API_KEY}"
                     docker compose up -d
-
                     docker ps
                 '''
             }
         }
 
         // ****************************
-        // *** Smoke / Health Check ***
+        // *** Seed initial user    ***
         // ****************************
-        stage("Smoke_Test") {
+        stage("Seed_Admin_User") {
+            when {
+                expression { return params.SEED_ADMIN }
+            }
             steps {
-                echo "***** Running smoke check on port 3000 *****"
+                echo "***** Seeding initial admin user via /api/auth/sign-up/email *****"
                 sh '''
                     set -e
-                    # Try localhost first; if behind SIF etc, adapt this later
-                    echo "Waiting for portal to respond on http://localhost:3000 ..."
-                    for i in {1..12}; do
-                      if curl -fs http://localhost:3000 > /dev/null 2>&1; then
-                        echo "Smoke test OK: portal is responding."
-                        exit 0
-                      fi
-                      echo "Not ready yet, retrying in 5s..."
-                      sleep 5
+
+                    # Wait for portal to be ready
+                    for i in $(seq 1 10); do
+                        if curl -fs http://localhost:3000 > /dev/null 2>&1; then
+                            echo "Portal responding, seeding user..."
+                            break
+                        fi
+                        echo "Waiting for portal on localhost:3000..."
+                        sleep 5
                     done
 
-                    echo "ERROR: portal did not become healthy on http://localhost:3000 in time"
-                    exit 1
+                    STATUS=$(curl -o /tmp/register_resp.txt -s -w "%{http_code}" \
+                        -X POST http://localhost:3000/api/auth/sign-up/email \
+                        -H "Content-Type: application/json" \
+                        -d "{\"name\":\"Admin\",\"email\":\"${ADMIN_EMAIL}\",\"password\":\"${ADMIN_PASSWORD}\"}")
+
+                    if [ "$STATUS" = "200" ] || [ "$STATUS" = "201" ] || [ "$STATUS" = "409" ]; then
+                        echo "Seed user request returned HTTP $STATUS (OK or already exists)"
+                    else
+                        echo "Seed user request returned HTTP $STATUS"
+                        cat /tmp/register_resp.txt || true
+                        echo "WARNING: Seeding failed, but deployment continues"
+                    fi
                 '''
             }
         }
@@ -124,12 +141,9 @@ pipeline {
 
     post {
         failure {
-            echo "Deployment failed. Showing last logs from docker compose (if available)."
-            sh '''
-                set +e
-                docker compose ps || true
-                docker compose logs --tail=100 app || true
-            '''
+            node("${AGENT_LABEL}") {
+                sh 'docker compose down || true'
+            }
         }
     }
 }
