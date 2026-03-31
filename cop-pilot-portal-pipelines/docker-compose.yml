@@ -1,28 +1,25 @@
-version: "3.9"
-
 services:
-  app:
+  cop-pilot-portal:
     image: ${DOCKER_REG}${DOCKER_REPO}${APP_NAME}:${DOCKER_TAG}
-    env_file:
-      - .env
+    container_name: ${APP_NAME}
+    build:
+      context: .
+      dockerfile: Dockerfile
     environment:
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET}
+      BETTER_AUTH_URL: ${BETTER_AUTH_URL}
+      TMF_BASE_URL: ${TMF_BASE_URL:-}
+      TMF_API_KEY: ${TMF_API_KEY:-}
+      LLM_ASSISTANT_ENDPOINT: ${LLM_ASSISTANT_ENDPOINT:-}
+      LLM_ASSISTANT_API_KEY: ${LLM_ASSISTANT_API_KEY:-}
       SQLITE_DB_PATH: /data/sqlite.db
       NODE_ENV: production
     ports:
       - "3000:3000"
-    depends_on:
-      sqlite:
-        condition: service_started
     volumes:
       - sqlite-data:/data
-    restart: unless-stopped
-
-  sqlite:
-    image: alpine:3.20
-    command: >
-      sh -c "touch /data/sqlite.db && chown 1001:1001 /data/sqlite.db && tail -f /dev/null"
-    volumes:
-      - sqlite-data:/data
+    labels:
+      io.portainer.accesscontrol.teams: coppilot-all
     restart: unless-stopped
 
 volumes:
