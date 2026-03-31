@@ -146,5 +146,5 @@ This allows the pipeline to inject the correct values.
 
 ## 📬 Support
 
-If you need help troubleshooting deployments or onboarding your VM into the COP-PILOT CI/CD infrastructure, contact the core DevOps team.
+If you need help troubleshooting deployments or onboarding your VM into the COP-PILOT CI/CD infrastructure, contact the NETC team.
 
