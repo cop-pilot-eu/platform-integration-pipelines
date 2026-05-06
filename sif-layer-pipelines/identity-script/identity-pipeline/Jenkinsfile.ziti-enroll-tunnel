@@ -1,0 +1,315 @@
+pipeline {
+    /************************************************************
+     * PARAMETERS
+     ************************************************************/
+    parameters {
+        string(
+            name: 'NODE_LABEL',
+            defaultValue: 'target-vm',
+            description: 'Jenkins node label of the VM to enroll into SIF (OpenZiti)'
+        )
+
+        string(
+            name: 'JWT_FILENAME',
+            defaultValue: '',
+            description: 'Name of the JWT enrollment token file (must be in the workspace)'
+        )
+
+        choice(
+            name: 'TUNNEL_MODE',
+            choices: ['systemd', 'nohup'],
+            description: 'How to run ziti-edge-tunnel: systemd service (default) or nohup background process'
+        )
+    }
+
+    /************************************************************
+     * AGENT
+     ************************************************************/
+    agent {
+        label "${params.NODE_LABEL}"
+    }
+
+    /************************************************************
+     * ENVIRONMENT
+     ************************************************************/
+    environment {
+        SCRIPT_NAME = 'ziti_install_enroll_and_tunnel.sh'
+    }
+
+    options { timestamps() }
+
+    /************************************************************
+     * STAGES
+     ************************************************************/
+    stages {
+
+        // ****************************
+        // *** VALIDATE PARAMETERS  ***
+        // ****************************
+        stage('Validate parameters') {
+            steps {
+                sh '''#!/usr/bin/env bash
+                    set -eu
+
+                    if [ -z "${JWT_FILENAME}" ]; then
+                        echo "ERROR: JWT_FILENAME parameter is required"
+                        exit 1
+                    fi
+
+                    if [ ! -f "${JWT_FILENAME}" ]; then
+                        echo "ERROR: JWT file not found in workspace: ${JWT_FILENAME}"
+                        echo "Please ensure the JWT file is available in the Jenkins workspace."
+                        exit 1
+                    fi
+
+                    echo "JWT file found: ${JWT_FILENAME}"
+                '''
+            }
+        }
+
+        // ****************************
+        // *** INSTALL DEPENDENCIES ***
+        // ****************************
+        stage('Install dependencies') {
+            steps {
+                sh '''#!/usr/bin/env bash
+                    set -eu
+
+                    echo "Checking and installing dependencies (curl, jq, unzip, tar)..."
+
+                    need_install=0
+                    command -v curl  >/dev/null || need_install=1
+                    command -v jq    >/dev/null || need_install=1
+                    command -v unzip >/dev/null || need_install=1
+                    command -v tar   >/dev/null || need_install=1
+
+                    if [ "$need_install" = "1" ]; then
+                        if command -v apt-get >/dev/null; then
+                            sudo apt-get update -y
+                            sudo apt-get install -y curl jq unzip tar
+                        elif command -v dnf >/dev/null; then
+                            sudo dnf install -y curl jq unzip tar
+                        elif command -v yum >/dev/null; then
+                            sudo yum install -y curl jq unzip tar
+                        else
+                            echo "ERROR: Unsupported package manager"
+                            exit 1
+                        fi
+                    else
+                        echo "All dependencies already installed."
+                    fi
+                '''
+            }
+        }
+
+        // ****************************
+        // *** INSTALL ZITI CLI     ***
+        // ****************************
+        stage('Install Ziti CLI') {
+            steps {
+                sh '''#!/usr/bin/env bash
+                    set -eu
+
+                    ARCH="$(uname -m)"
+                    case "${ARCH}" in
+                        x86_64|amd64) ZITI_ARCH="amd64" ;;
+                        aarch64|arm64) ZITI_ARCH="arm64" ;;
+                        *) echo "ERROR: Unsupported arch: ${ARCH}"; exit 1 ;;
+                    esac
+
+                    echo "Downloading latest ziti CLI for linux/${ZITI_ARCH}..."
+
+                    RELEASE_JSON=$(curl -fsSL "https://api.github.com/repos/openziti/ziti/releases/latest")
+                    ASSET_URL=$(echo "$RELEASE_JSON" | jq -r --arg arch "${ZITI_ARCH}" '
+                        .assets[] | select(.name | test("(?i)linux.*" + $arch + ".*(\\.zip|\\.tar\\.gz)$")) | .browser_download_url
+                    ' | head -n 1)
+
+                    if [ -z "$ASSET_URL" ] || [ "$ASSET_URL" = "null" ]; then
+                        echo "ERROR: Could not find ziti CLI asset"
+                        exit 1
+                    fi
+
+                    TMPDIR=$(mktemp -d)
+                    ASSET_NAME=$(basename "$ASSET_URL")
+                    curl -fL "$ASSET_URL" -o "${TMPDIR}/${ASSET_NAME}"
+
+                    if echo "$ASSET_NAME" | grep -q ".tar.gz"; then
+                        tar -xzf "${TMPDIR}/${ASSET_NAME}" -C "${TMPDIR}"
+                    else
+                        unzip -q "${TMPDIR}/${ASSET_NAME}" -d "${TMPDIR}"
+                    fi
+
+                    ZITI_BIN=$(find "${TMPDIR}" -type f -name ziti -perm -u+x | head -n 1)
+                    sudo install -m 0755 "${ZITI_BIN}" /usr/local/bin/ziti
+                    rm -rf "${TMPDIR}"
+
+                    echo "ziti CLI installed: $(ziti version 2>/dev/null || true)"
+                '''
+            }
+        }
+
+        // **********************************
+        // *** INSTALL ZITI-EDGE-TUNNEL   ***
+        // **********************************
+        stage('Install ziti-edge-tunnel') {
+            steps {
+                sh '''#!/usr/bin/env bash
+                    set -eu
+
+                    ARCH="$(uname -m)"
+                    case "${ARCH}" in
+                        x86_64|amd64) SDK_ARCH_RE="(amd64|x86_64)" ;;
+                        aarch64|arm64) SDK_ARCH_RE="(arm64|aarch64)" ;;
+                        *) echo "ERROR: Unsupported arch: ${ARCH}"; exit 1 ;;
+                    esac
+
+                    echo "Downloading latest ziti-edge-tunnel for linux/${ARCH}..."
+
+                    RELEASE_JSON=$(curl -fsSL "https://api.github.com/repos/openziti/ziti-tunnel-sdk-c/releases/latest")
+                    ASSET_URL=$(echo "$RELEASE_JSON" | jq -r --arg re "(?i)ziti-edge-tunnel.*linux.*${SDK_ARCH_RE}.*(\\.zip|\\.tar\\.gz)$" '
+                        .assets[] | select(.name | test($re)) | .browser_download_url
+                    ' | head -n 1)
+
+                    if [ -z "$ASSET_URL" ] || [ "$ASSET_URL" = "null" ]; then
+                        echo "ERROR: Could not find ziti-edge-tunnel asset"
+                        exit 1
+                    fi
+
+                    TMPDIR=$(mktemp -d)
+                    ASSET_NAME=$(basename "$ASSET_URL")
+                    curl -fL "$ASSET_URL" -o "${TMPDIR}/${ASSET_NAME}"
+
+                    if echo "$ASSET_NAME" | grep -q ".tar.gz"; then
+                        tar -xzf "${TMPDIR}/${ASSET_NAME}" -C "${TMPDIR}"
+                    else
+                        unzip -q "${TMPDIR}/${ASSET_NAME}" -d "${TMPDIR}"
+                    fi
+
+                    TUN_BIN=$(find "${TMPDIR}" -type f -name ziti-edge-tunnel -perm -u+x | head -n 1)
+                    sudo install -m 0755 "${TUN_BIN}" /usr/local/bin/ziti-edge-tunnel
+                    rm -rf "${TMPDIR}"
+
+                    echo "ziti-edge-tunnel installed: $(ziti-edge-tunnel version 2>/dev/null || true)"
+                '''
+            }
+        }
+
+        // ****************************
+        // *** ENROLL IDENTITY      ***
+        // ****************************
+        stage('Enroll identity') {
+            steps {
+                sh '''#!/usr/bin/env bash
+                    set -eu
+
+                    BASENAME="${JWT_FILENAME%.jwt}"
+                    OUT_JSON="${BASENAME}.json"
+
+                    if [ -f "${OUT_JSON}" ]; then
+                        echo "Identity JSON already exists: ${OUT_JSON}"
+                        echo "Skipping enrollment."
+                    else
+                        echo "Enrolling identity from ${JWT_FILENAME}..."
+                        ziti edge enroll "${JWT_FILENAME}" -o "${OUT_JSON}"
+                        echo "Enrollment successful: ${OUT_JSON}"
+                    fi
+                '''
+            }
+        }
+
+        // ****************************
+        // *** START ZITI TUNNEL    ***
+        // ****************************
+        stage('Start ziti-edge-tunnel') {
+            steps {
+                sh '''#!/usr/bin/env bash
+                    set -eu
+
+                    BASENAME="${JWT_FILENAME%.jwt}"
+                    OUT_JSON="${BASENAME}.json"
+                    LOG_FILE="ziti-${BASENAME}.log"
+
+                    if [ "${TUNNEL_MODE}" = "nohup" ]; then
+                        echo "Starting ziti-edge-tunnel with nohup..."
+                        sudo nohup /usr/local/bin/ziti-edge-tunnel run -i "${OUT_JSON}" > "${LOG_FILE}" 2>&1 &
+                        sleep 3
+                        echo "Started. Log: ${LOG_FILE}"
+                    else
+                        echo "Starting ziti-edge-tunnel as systemd service..."
+
+                        UNIT_NAME="ziti-edge-tunnel-${BASENAME}.service"
+                        UNIT_PATH="/etc/systemd/system/${UNIT_NAME}"
+                        FULL_JSON_PATH="$(pwd)/${OUT_JSON}"
+
+                        sudo bash -c "cat > '${UNIT_PATH}'" <<EOF
+[Unit]
+Description=OpenZiti Edge Tunnel (${BASENAME})
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/ziti-edge-tunnel run -i ${FULL_JSON_PATH}
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+                        sudo systemctl daemon-reload
+                        sudo systemctl enable --now "${UNIT_NAME}"
+                        echo "Service started: ${UNIT_NAME}"
+                    fi
+                '''
+            }
+        }
+
+        // ****************************
+        // *** VERIFY CONNECTIVITY  ***
+        // ****************************
+        stage('Verify tunnel connectivity') {
+            steps {
+                sh '''#!/usr/bin/env bash
+                    set -eu
+
+                    echo "Verifying ziti-edge-tunnel is running..."
+
+                    ATTEMPTS=15
+                    SUCCESS=0
+
+                    for i in $(seq 1 $ATTEMPTS); do
+                        if ps aux | grep -v grep | grep -q ziti-edge-tunnel; then
+                            echo "ziti-edge-tunnel process is running (attempt $i)."
+                            SUCCESS=1
+                            break
+                        fi
+                        echo "Waiting for tunnel process (attempt $i/${ATTEMPTS})..."
+                        sleep 5
+                    done
+
+                    if [ "$SUCCESS" -ne 1 ]; then
+                        echo "ERROR: ziti-edge-tunnel does not appear to be running."
+                        exit 1
+                    fi
+
+                    echo ""
+                    echo "VM is now connected to the SIF (OpenZiti) network."
+                    echo "Identity should appear ONLINE (green) in the CloudZiti Console."
+                '''
+            }
+        }
+    }
+
+    /************************************************************
+     * POST ACTIONS
+     ************************************************************/
+    post {
+        success {
+            echo "SIF enrollment and tunnel startup completed successfully on node '${params.NODE_LABEL}'."
+        }
+        failure {
+            echo "SIF enrollment failed on node '${params.NODE_LABEL}'. Check logs above."
+        }
+    }
+}
