@@ -121,7 +121,7 @@ operational notes - `README.md` --- SIF layer overview and usage -
 
 ------------------------------------------------------------------------
 
-## 🟪 DO Layer Pipelines
+## 🟥 DO Layer Pipelines
 
 **Path:** `service-orchestrator-pipelines/`
 
