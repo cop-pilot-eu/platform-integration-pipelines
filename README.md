@@ -121,6 +121,17 @@ operational notes - `README.md` --- SIF layer overview and usage -
 
 ------------------------------------------------------------------------
 
+## 🟪 DO Layer Pipelines
+
+**Path:** `service-orchestrator-pipelines/`
+
+Pipelines related to the **Domain Orchestrator (DO)** layer.
+
+**Contents:** - `Jenkinsfile.openslice-k8s-deploy` --- Deploys and
+validates OpenSlice on Kubernetes -
+
+------------------------------------------------------------------------
+
 ## 📘 Documentation Philosophy
 
 -   This **global README** provides a structural overview of the
