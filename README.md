@@ -105,30 +105,40 @@ installation and tunneling issues
 
 ------------------------------------------------------------------------
 
-### 📁 Ziti Edge Router Deployment
+### 📁 Ziti Service Creation Pipelines
 
 **Path:** `sif-layer-pipelines/`
 
-Pipelines for deploying and managing **OpenZiti Edge Routers**.
+Pipelines for creating and exposing platform services securely through **OpenZiti**.
 
-**Contents:** - `Jenkinsfile.ziti-router-deploy` --- Deploys and
-validates an OpenZiti Edge Router - `Jenkinsfile.ziti-OS-service-create`
---- Creates OpenZiti services for OpenSlice -
-`OpenSlice-service-creation.md` --- Documentation for OpenSlice service
-onboarding - `Edge-Router-README.md` --- Edge Router deployment and
-operational notes - `README.md` --- SIF layer overview and usage -
-`LICENSE` --- Repository license
+**Contents:**
+
+#### Ziti Edge Router Deployment
+- `Jenkinsfile.ziti-router-deploy` --- Deploys and validates an OpenZiti Edge Router
+- `Edge-Router-README.md` --- Edge Router deployment and operational notes
+
+#### Service Exposure via Ziti
+
+- `Jenkinsfile.ziti-OS-service-create` --- Creates OpenZiti services for OpenSlice
+- `OpenSlice-service-creation.md` --- Documentation for OpenSlice service onboarding via Ziti
+- `Jenkinsfile.orionld-ziti-service-create` --- Creates OpenZiti services for Orion-LD (NGSI-LD)
+- `README-orionld-ziti-service-creation.md` --- Documentation for Orion-LD service onboarding via Ziti
+
+#### Documentation & License
+- `README.md` --- SIF layer overview and usage
+- `LICENSE` --- Repository license
 
 ------------------------------------------------------------------------
 
-## 🟥 DO Layer Pipelines
+## 🟥 Domain Orchestrator (DO) Layer Pipelines
 
-**Path:** `service-orchestrator-pipelines/`
+**Path:** `domain-orchestrator-pipelines/`
 
-Pipelines related to the **Domain Orchestrator (DO)** layer.
+Pipelines responsible for deploying and validating the **Domain Orchestrator (OpenSlice)** layer.
 
-**Contents:** - `Jenkinsfile.openslice-k8s-deploy` --- Deploys and
-validates OpenSlice on Kubernetes -
+**Contents:**
+- `Jenkinsfile.openslice-k8s-deploy` --- Deploys and validates OpenSlice on Kubernetes
+- `README-openslice-k8s-deploy.md` --- Deployment guide, parameters, prerequisites, and troubleshooting
 
 ------------------------------------------------------------------------
 
