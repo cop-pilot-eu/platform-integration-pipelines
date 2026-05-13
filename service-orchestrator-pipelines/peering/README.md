@@ -1,11 +1,11 @@
-# 🚀 Maestro TMF Organization & Peering Jenkins Pipeline
+# 🚀 HypO TMF Organization & Peering Jenkins Pipeline
 
 ## 📌 Overview
 
 This Jenkins pipeline automates the **creation of a TMF Organization in
-Maestro** and the **initialization of the peering process** between
-Maestro and an external OpenSlice domain.\
-It also enriches Maestro with **service specifications**, **service
+HypO** and the **initialization of the peering process** between
+HypO and an external OpenSlice domain.\
+It also enriches HypO with **service specifications**, **service
 catalogs**, and **service categories** derived from the peering
 response.
 
@@ -16,9 +16,9 @@ runs on the Jenkins agent labeled **`doc-vm`**.
 
 ## 🔄 High-Level Flow
 
-1.  🔐 Authenticate against Maestro (OAuth2)
+1.  🔐 Authenticate against HypO (OAuth2)
 2.  🧩 Render TMF Organization payload
-3.  🏢 Create Organization in Maestro
+3.  🏢 Create Organization in HypO
 4.  🔍 Validate Peering API access
 5.  🔗 Start Peering process
 6.  📦 Import Service Specs & Catalogs
@@ -39,12 +39,12 @@ runs on the Jenkins agent labeled **`doc-vm`**.
 
 ## ⚙️ Pipeline Parameters
 
-### 🔐 Maestro / Keycloak Authentication
+### 🔐 HypO / Keycloak Authentication
 
   **Parameter**   **Description**
   --------------- ----------------------------------------
-  `KC_USERNAME`   Maestro (Keycloak) username  
-  `KC_PASSWORD`   Maestro (Keycloak) password *(masked)*
+  `KC_USERNAME`   HypO (Keycloak) username  
+  `KC_PASSWORD`   HypO (Keycloak) password *(masked)*
 
 ------------------------------------------------------------------------
 
@@ -52,7 +52,7 @@ runs on the Jenkins agent labeled **`doc-vm`**.
 
   **Parameter**             **Description**
   ------------------------- --------------------------------------------
-  `TMF_PARTY_ORG`           Organization name to be created in Maestro  
+  `TMF_PARTY_ORG`           Organization name to be created in HypO  
   `SERVICE_CATALOG_NAME`    Name of the Service Catalog to create  
   `SERVICE_CATEGORY_NAME`   Name of the Service Category  
   `CITY`                    Organization city  
@@ -92,9 +92,9 @@ need to be changed** unless endpoints change.
 
 -   🔑 `TOKEN_URL` -- OAuth2 token endpoint\
 -   🆔 `CLIENT_ID` -- OAuth2 client ID (`tmf-api`)\
--   🧩 `MAESTRO_TMF_BASE` -- Maestro TMF API base URL\
+-   🧩 `HypO_TMF_BASE` -- HypO TMF API base URL\
 -   🏗️ `CREATE_ORG_PATH` -- TMF Organization creation path\
--   🔗 `PEERING_API_BASE` -- Maestro Peering API base URL\
+-   🔗 `PEERING_API_BASE` -- HypO Peering API base URL\
 -   ▶️ `PEERING_PATH` -- Start peering endpoint\
 -   ➕ `PEERING_ADD_PATH` -- Add peering details endpoint\
 -   📁 `PEERING_DIR` -- Repository-relative pipeline directory\
@@ -120,9 +120,9 @@ need to be changed** unless endpoints change.
 
 ------------------------------------------------------------------------
 
-### 3️⃣ Create Organization in Maestro TMF
+### 3️⃣ Create Organization in HypO TMF
 
--   Sends `POST` request to Maestro TMF API
+-   Sends `POST` request to HypO TMF API
 -   Accepts HTTP `200` or `201`
 
 ------------------------------------------------------------------------
@@ -151,7 +151,7 @@ need to be changed** unless endpoints change.
 
 ## ✅ Expected Outcome
 
--   Organization exists in Maestro
+-   Organization exists in HypO
 -   Peering with OpenSlice is established
 -   Service Specifications imported
 -   Service Catalog & Category created
@@ -168,7 +168,7 @@ need to be changed** unless endpoints change.
 
 ## 🔗 Related Components
 
--   Maestro TMF APIs
--   Maestro Peering APIs
+-   HypO TMF APIs
+-   HypO Peering APIs
 -   OpenSlice TMF APIs
 -   COP-PILOT Platform Integration Pipelines
