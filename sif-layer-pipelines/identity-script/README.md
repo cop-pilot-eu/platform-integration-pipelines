@@ -75,3 +75,30 @@ ziti-identity.log
 
 - Go back to **Identities**
 - The identity should now appear **online (green)**
+
+---
+
+## 6️⃣ Restarting the Tunnel
+
+If the tunnel stops for any reason, you can restart it manually:
+
+```bash
+sudo nohup /usr/local/bin/ziti-edge-tunnel run -i <identity.json> > ziti-<identity>.log 2>&1 &
+```
+
+Replace `<identity.json>` with the name of your enrolled identity file (e.g., `OpenSlice-central-domain.json`).
+
+---
+
+## 7️⃣ Re-enabling the Tunnel (if not started with --nohup)
+
+If you ran the script without the `--nohup` flag, the tunnel will not run in the background. To re-enable it:
+
+1. Locate the identity JSON file created by the script (e.g., `OpenSlice-central-domain.json`).
+2. Use the following command to start the tunnel in the background:
+
+```bash
+sudo nohup /usr/local/bin/ziti-edge-tunnel run -i <identity.json> > ziti-<identity>.log 2>&1 &
+```
+
+Replace `<identity.json>` with the name of your enrolled identity file (e.g., `OpenSlice-central-domain.json`).
