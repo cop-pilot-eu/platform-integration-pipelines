@@ -301,7 +301,8 @@ EXCLUDE_NAMES = {
     "NGINX in K3s",
     "K8aaS",
     "COP-PILOT Cluster 1 Demo Service",
-    "Mining Data Logger"
+    "Mining Data Logger",
+    "PowerFleet TEST"
 }
 
 EXCLUDE_TYPES = {
