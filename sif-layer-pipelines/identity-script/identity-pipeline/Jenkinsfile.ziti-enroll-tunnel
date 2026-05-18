@@ -9,9 +9,10 @@ pipeline {
             description: 'Jenkins node label of the VM to enroll into SIF (OpenZiti)'
         )
 
-        file(
-            name: 'JWT_FILE',
-            description: 'JWT enrollment token file (upload here)'
+        string(
+            name: 'JWT_CREDENTIAL_ID',
+            defaultValue: 'bml-components.jwt',
+            description: 'Jenkins credential ID for the JWT enrollment token file'
         )
 
         choice(
@@ -47,27 +48,26 @@ pipeline {
         // ****************************
         stage('Validate parameters') {
             steps {
-                sh '''#!/usr/bin/env bash
-                    set -eu
+                withCredentials([file(credentialsId: '${JWT_CREDENTIAL_ID}', variable: 'JWT_FILE_PATH')]) {
+                    sh '''#!/usr/bin/env bash
+                        set -eu
 
-                    # Jenkins file parameter stores the file path
-                    JWT_FILE_PATH="${JWT_FILE}"
+                        if [ -z "${JWT_FILE_PATH}" ]; then
+                            echo "ERROR: JWT credential not found: ${JWT_CREDENTIAL_ID}"
+                            exit 1
+                        fi
 
-                    if [ -z "${JWT_FILE_PATH}" ]; then
-                        echo "ERROR: JWT_FILE parameter is required"
-                        exit 1
-                    fi
+                        if [ ! -f "${JWT_FILE_PATH}" ]; then
+                            echo "ERROR: JWT file not found: ${JWT_FILE_PATH}"
+                            exit 1
+                        fi
 
-                    if [ ! -f "${JWT_FILE_PATH}" ]; then
-                        echo "ERROR: JWT file not found: ${JWT_FILE_PATH}"
-                        exit 1
-                    fi
-
-                    echo "JWT file found: ${JWT_FILE_PATH}"
-                    
-                    # Export for use in later stages
-                    echo "${JWT_FILE_PATH}" > /tmp/jwt_file_path.txt
-                '''
+                        echo "JWT file found from credential: ${JWT_FILE_PATH}"
+                        
+                        # Export for use in later stages (unique per build)
+                        echo "${JWT_FILE_PATH}" > /tmp/jwt_file_path_${BUILD_NUMBER}.txt
+                    '''
+                }
             }
         }
 
@@ -207,7 +207,7 @@ pipeline {
                     set -eu
 
                     # Read JWT file path from validation stage
-                    JWT_FILE_PATH=$(cat /tmp/jwt_file_path.txt)
+                    JWT_FILE_PATH=$(cat /tmp/jwt_file_path_${BUILD_NUMBER}.txt)
                     
                     # Get filename and derive output JSON name
                     JWT_FILENAME=$(basename "${JWT_FILE_PATH}")
@@ -235,7 +235,7 @@ pipeline {
                     set -eu
 
                     # Read JWT file path from validation stage
-                    JWT_FILE_PATH=$(cat /tmp/jwt_file_path.txt)
+                    JWT_FILE_PATH=$(cat /tmp/jwt_file_path_${BUILD_NUMBER}.txt)
                     JWT_FILENAME=$(basename "${JWT_FILE_PATH}")
                     BASENAME="${JWT_FILENAME%.jwt}"
                     OUT_JSON="${BASENAME}.json"
