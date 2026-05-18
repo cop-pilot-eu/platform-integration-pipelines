@@ -124,8 +124,8 @@ pipeline {
                     echo "Downloading latest ziti CLI for linux/${ZITI_ARCH}..."
 
                     RELEASE_JSON=$(curl -fsSL "https://api.github.com/repos/openziti/ziti/releases/latest")
-                    ASSET_URL=$(echo "$RELEASE_JSON" | jq -r --arg arch "${ZITI_ARCH}" '
-                        .assets[] | select(.name | test("(?i)linux.*" + $arch + ".*(\\.zip|\\.tar\\.gz)$")) | .browser_download_url
+                    ASSET_URL=$(echo "$RELEASE_JSON" | jq -r --arg re "(?i)linux.*${ZITI_ARCH}.*(\\.zip|\\.tar\\.gz)$" '
+                        .assets[] | select(.name | test($re)) | .browser_download_url
                     ' | head -n 1)
 
                     if [ -z "$ASSET_URL" ] || [ "$ASSET_URL" = "null" ]; then
