@@ -48,7 +48,7 @@ pipeline {
         // ****************************
         stage('Validate parameters') {
             steps {
-                withCredentials([file(credentialsId: '${JWT_CREDENTIAL_ID}', variable: 'JWT_FILE_PATH')]) {
+                withCredentials([file(credentialsId: "${params.JWT_CREDENTIAL_ID}", variable: 'JWT_FILE_PATH')]) {
                     sh '''#!/usr/bin/env bash
                         set -eu
 
