@@ -9,10 +9,9 @@ pipeline {
             description: 'Jenkins node label of the VM to enroll into SIF (OpenZiti)'
         )
 
-        string(
-            name: 'JWT_FILENAME',
-            defaultValue: '',
-            description: 'Name of the JWT enrollment token file (must be in the workspace)'
+        file(
+            name: 'JWT_FILE',
+            description: 'JWT enrollment token file (upload here)'
         )
 
         choice(
@@ -51,18 +50,23 @@ pipeline {
                 sh '''#!/usr/bin/env bash
                     set -eu
 
-                    if [ -z "${JWT_FILENAME}" ]; then
-                        echo "ERROR: JWT_FILENAME parameter is required"
+                    # Jenkins file parameter stores the file path
+                    JWT_FILE_PATH="${JWT_FILE}"
+
+                    if [ -z "${JWT_FILE_PATH}" ]; then
+                        echo "ERROR: JWT_FILE parameter is required"
                         exit 1
                     fi
 
-                    if [ ! -f "${JWT_FILENAME}" ]; then
-                        echo "ERROR: JWT file not found in workspace: ${JWT_FILENAME}"
-                        echo "Please ensure the JWT file is available in the Jenkins workspace."
+                    if [ ! -f "${JWT_FILE_PATH}" ]; then
+                        echo "ERROR: JWT file not found: ${JWT_FILE_PATH}"
                         exit 1
                     fi
 
-                    echo "JWT file found: ${JWT_FILENAME}"
+                    echo "JWT file found: ${JWT_FILE_PATH}"
+                    
+                    # Export for use in later stages
+                    echo "${JWT_FILE_PATH}" > /tmp/jwt_file_path.txt
                 '''
             }
         }
@@ -202,6 +206,11 @@ pipeline {
                 sh '''#!/usr/bin/env bash
                     set -eu
 
+                    # Read JWT file path from validation stage
+                    JWT_FILE_PATH=$(cat /tmp/jwt_file_path.txt)
+                    
+                    # Get filename and derive output JSON name
+                    JWT_FILENAME=$(basename "${JWT_FILE_PATH}")
                     BASENAME="${JWT_FILENAME%.jwt}"
                     OUT_JSON="${BASENAME}.json"
 
@@ -209,8 +218,8 @@ pipeline {
                         echo "Identity JSON already exists: ${OUT_JSON}"
                         echo "Skipping enrollment."
                     else
-                        echo "Enrolling identity from ${JWT_FILENAME}..."
-                        ziti edge enroll "${JWT_FILENAME}" -o "${OUT_JSON}"
+                        echo "Enrolling identity from ${JWT_FILE_PATH}..."
+                        ziti edge enroll "${JWT_FILE_PATH}" -o "${OUT_JSON}"
                         echo "Enrollment successful: ${OUT_JSON}"
                     fi
                 '''
@@ -225,6 +234,9 @@ pipeline {
                 sh '''#!/usr/bin/env bash
                     set -eu
 
+                    # Read JWT file path from validation stage
+                    JWT_FILE_PATH=$(cat /tmp/jwt_file_path.txt)
+                    JWT_FILENAME=$(basename "${JWT_FILE_PATH}")
                     BASENAME="${JWT_FILENAME%.jwt}"
                     OUT_JSON="${BASENAME}.json"
                     LOG_FILE="ziti-${BASENAME}.log"
