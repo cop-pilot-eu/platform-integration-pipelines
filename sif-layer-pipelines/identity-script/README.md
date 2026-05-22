@@ -1,6 +1,7 @@
 # 🚀 CloudZiti VM Identity Enrollment Guide (Script-Based)
 
-This guide explains how to enroll a Linux VM as a **CloudZiti identity** using an automated script.
+This guide explains how to enroll a Linux VM as a **CloudZiti identity** using an automated script and run the Ziti tunneler as a **systemd service** in the background.
+
 ---
 
 ## 1️⃣ Create an Identity in CloudZiti
@@ -45,8 +46,11 @@ chmod +x ziti_install_enroll_and_tunnel.sh
 Run the script, passing the JWT filename as input:
 
 ```bash
-./ziti_install_enroll_and_tunnel.sh OpenSlice-central-domain.jwt --nohup
+./ziti_install_enroll_and_tunnel.sh OpenSlice-central-domain.jwt
 ```
+
+> Do not use `--nohup`.
+> When the script is executed without `--nohup`, it starts the Ziti tunneler as a **systemd service**.
 
 ---
 
@@ -54,17 +58,32 @@ Run the script, passing the JWT filename as input:
 
 The script automatically:
 
-- Installs required system dependencies
+- Installs the required system dependencies
 - Downloads and installs the **OpenZiti CLI**
 - Downloads and installs **ziti-edge-tunnel**
 - Enrolls the identity (`.jwt → .json`)
-- Starts the Ziti tunnel in the background (`nohup` mode)
+- Creates a **systemd service** for the Ziti tunneler
+- Starts the Ziti tunnel in the background as a service
+- Enables the service to start automatically after reboot
 
-Output files created:
+Output file created:
 
 ```text
 identity.json
-ziti-identity.log
+```
+
+Example:
+
+```text
+OpenSlice-central-domain.json
+```
+
+The systemd service name is created based on the JWT filename.
+
+Example:
+
+```text
+ziti-edge-tunnel-OpenSlice-central-domain.service
 ```
 
 ---
@@ -74,31 +93,124 @@ ziti-identity.log
 ### In CloudZiti Console
 
 - Go back to **Identities**
-- The identity should now appear **online (green)**
+- The identity should now appear **online / green**
+
+### On the VM
+
+Check the service status:
+
+```bash
+sudo systemctl status ziti-edge-tunnel-OpenSlice-central-domain.service --no-pager
+```
+
+View the latest logs:
+
+```bash
+sudo journalctl -u ziti-edge-tunnel-OpenSlice-central-domain.service -n 100 --no-pager
+```
+
+Follow logs live:
+
+```bash
+sudo journalctl -u ziti-edge-tunnel-OpenSlice-central-domain.service -f
+```
 
 ---
 
-## 6️⃣ Restarting the Tunnel
+## 6️⃣ Restarting the Tunnel Service
 
-If the tunnel stops for any reason, you can restart it manually:
+If the tunnel stops for any reason, restart the systemd service:
+
+```bash
+sudo systemctl restart ziti-edge-tunnel-OpenSlice-central-domain.service
+```
+
+Check the service again:
+
+```bash
+sudo systemctl status ziti-edge-tunnel-OpenSlice-central-domain.service --no-pager
+```
+
+---
+
+## 7️⃣ Stopping the Tunnel Service
+
+To stop the tunnel:
+
+```bash
+sudo systemctl stop ziti-edge-tunnel-OpenSlice-central-domain.service
+```
+
+To verify that it stopped:
+
+```bash
+sudo systemctl status ziti-edge-tunnel-OpenSlice-central-domain.service --no-pager
+```
+
+---
+
+## 8️⃣ Starting the Tunnel Service Manually
+
+To start the tunnel again:
+
+```bash
+sudo systemctl start ziti-edge-tunnel-OpenSlice-central-domain.service
+```
+
+---
+
+## 9️⃣ Enable or Disable Startup on Boot
+
+The script enables the service automatically, but you can enable it manually with:
+
+```bash
+sudo systemctl enable ziti-edge-tunnel-OpenSlice-central-domain.service
+```
+
+To disable automatic startup:
+
+```bash
+sudo systemctl disable ziti-edge-tunnel-OpenSlice-central-domain.service
+```
+
+---
+
+## 🔟 Useful Commands
+
+Check if the tunneler process is running:
+
+```bash
+pgrep -af ziti-edge-tunnel
+```
+
+View service logs:
+
+```bash
+sudo journalctl -u ziti-edge-tunnel-OpenSlice-central-domain.service -n 100 --no-pager
+```
+
+Follow service logs:
+
+```bash
+sudo journalctl -u ziti-edge-tunnel-OpenSlice-central-domain.service -f
+```
+
+Restart the service:
+
+```bash
+sudo systemctl restart ziti-edge-tunnel-OpenSlice-central-domain.service
+```
+
+---
+
+## Notes
+
+Do not start the tunneler manually with `nohup` if it is already running as a systemd service.
+
+Avoid running this command:
 
 ```bash
 sudo nohup /usr/local/bin/ziti-edge-tunnel run -i <identity.json> > ziti-<identity>.log 2>&1 &
 ```
 
-Replace `<identity.json>` with the name of your enrolled identity file (e.g., `OpenSlice-central-domain.json`).
-
----
-
-## 7️⃣ Re-enabling the Tunnel (if not started with --nohup)
-
-If you ran the script without the `--nohup` flag, the tunnel will not run in the background. To re-enable it:
-
-1. Locate the identity JSON file created by the script (e.g., `OpenSlice-central-domain.json`).
-2. Use the following command to start the tunnel in the background:
-
-```bash
-sudo nohup /usr/local/bin/ziti-edge-tunnel run -i <identity.json> > ziti-<identity>.log 2>&1 &
-```
-
-Replace `<identity.json>` with the name of your enrolled identity file (e.g., `OpenSlice-central-domain.json`).
+Using both `nohup` and `systemd` at the same time may start multiple tunnelers with the same identity.
