@@ -302,8 +302,7 @@ EXCLUDE_NAMES = {
     "K8aaS",
     "COP-PILOT Cluster 1 Demo Service",
     "Mining Data Logger",
-    "PowerFleet TEST",
-    "theTorre"
+    "PowerFleet TEST"
 }
 
 EXCLUDE_TYPES = {
