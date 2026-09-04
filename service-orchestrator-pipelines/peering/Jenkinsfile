@@ -130,7 +130,7 @@ with open(template_path, "r", encoding="utf-8") as f:
     payload = json.load(f)
 
 base = os.environ["OPENSLICE_TMF_API_URL"].rstrip("/")
-token_uri = f"{base}/auth/realms/openslice/protocol/openid-connect/token"
+token_uri = f"{base}/auth/realms/openslice"
 
 payload["name"] = os.environ["TMF_PARTY_ORG"]
 
