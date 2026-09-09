@@ -79,7 +79,7 @@
         },
         {
             "value": {
-                "value": "http://openslice.intranet.pnet/tmf-api",
+                "value": "http://openslice.intranet.pnet",
                 "alias": null
             },
             "name": "EXTERNAL_TMF_API_BASE_URL",
