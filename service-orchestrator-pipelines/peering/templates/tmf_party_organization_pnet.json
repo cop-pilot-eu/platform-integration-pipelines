@@ -119,13 +119,30 @@
         },
         {
             "value": {
-                "value": "true",
+                "value": "/tmf-api/serviceCatalogManagement/v4/serviceSpecification?type=CustomerFacingServiceSpecification",
                 "alias": null
             },
-            "name": "IS_COMMENTED",
+            "name": "EXTERNAL_TMF_API_SERVICE_CATALOG_URL",
+            "@baseType": "BaseEntity"
+        },
+        {
+            "value": {
+                "value": "K8aaS",
+                "alias": null
+            },
+            "name": "EXTERNAL_TMF_API_SERVICE_SPEC_ID",
+            "@baseType": "BaseEntity"
+        },
+        {
+            "value": {
+                "value": "secret",
+                "alias": null
+            },
+            "name": "EXTERNAL_TMF_API_OAUTH2_CLIENT_SECRET",
             "@baseType": "BaseEntity"
         }
     ],
-    "@schemaLocation": "",
-    "@type": "Organization"
+    "relatedParty": [],
+    "status": null,
+    "taxExemptionCertificate": []
 }
