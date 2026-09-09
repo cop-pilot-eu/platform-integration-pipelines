@@ -131,7 +131,6 @@ with open(template_path, "r", encoding="utf-8") as f:
     payload = json.load(f)
 
 tmf_base = os.environ["OPENSLICE_TMF_API_URL"].rstrip("/")
-tmf_api_base = f"{tmf_base}/tmf-api"
 keycloak_base = os.environ["OPENSLICE_KEYCLOAK_URL"].rstrip("/")
 token_uri = f"{keycloak_base}/realms/openslice"
 
@@ -157,7 +156,7 @@ for pc in payload.get("partyCharacteristic", []):
     elif n == "EXTERNAL_TMF_API_USERNAME":
         pc.setdefault("value", {})["value"] = os.environ["OS_USERNAME"]
     elif n == "EXTERNAL_TMF_API_BASE_URL":
-        pc.setdefault("value", {})["value"] = tmf_api_base
+        pc.setdefault("value", {})["value"] = tmf_base
     elif n == "EXTERNAL_TMF_API_OAUTH2_TOKEN_URI":
         pc.setdefault("value", {})["value"] = token_uri
 
