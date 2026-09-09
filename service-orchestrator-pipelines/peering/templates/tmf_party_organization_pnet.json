@@ -1,0 +1,131 @@
+{
+    "@baseType": "BaseEntity",
+    "@schemaLocation": null,
+    "@type": null,
+    "href": null,
+    "name": "Openslice-dev",
+    "isHeadOffice": null,
+    "isLegalEntity": null,
+    "nameType": null,
+    "organizationType": null,
+    "tradingName": null,
+    "contactMedium": [
+        {
+            "preferred": false,
+            "validFor": {
+                "endDateTime": "2027-10-22T08:31:52.026Z",
+                "startDateTime": "2018-10-22T08:31:52.028Z"
+            },
+            "@type": "GeographicAddressContactMedium",
+            "characteristic": {
+                "city": "Patras",
+                "country": "Greece",
+                "postCode": "",
+                "stateOrProvince": "",
+                "street1": "",
+                "street2": "",
+                "@baseType": "BaseEntity"
+            }
+        },
+        {
+            "preferred": true,
+            "validFor": {
+                "endDateTime": "2027-10-22T08:31:52.026Z",
+                "startDateTime": "2018-10-22T08:31:52.028Z"
+            },
+            "@type": "EmailContactMedium"
+        }
+    ],
+    "creditRating": [],
+    "existsDuring": null,
+    "externalReference": [],
+    "organizationChildRelationship": [],
+    "organizationIdentification": [],
+    "organizationParentRelationship": null,
+    "otherName": [],
+    "partyCharacteristic": [
+        {
+            "value": {
+                "value": "password1234",
+                "alias": null
+            },
+            "name": "EXTERNAL_TMF_API_PASSWORD",
+            "@baseType": "BaseEntity"
+        },
+        {
+            "valueType": "boolean",
+            "value": {
+                "value": "true",
+                "alias": null
+            },
+            "name": "PEERED_ORGANIZATION",
+            "@baseType": "BaseEntity"
+        },
+        {
+            "value": {
+                "value": "admin",
+                "alias": null
+            },
+            "name": "EXTERNAL_TMF_API_USERNAME",
+            "@baseType": "BaseEntity"
+        },
+        {
+            "value": {
+                "value": "/tmf-api/serviceCatalogManagement/v4/serviceCategory",
+                "alias": null
+            },
+            "name": "EXTERNAL_TMF_API_SERVICE_CATEGORY_URL",
+            "@baseType": "BaseEntity"
+        },
+        {
+            "value": {
+                "value": "http://openslice.intranet.pnet/tmf-api",
+                "alias": null
+            },
+            "name": "EXTERNAL_TMF_API_BASE_URL",
+            "@baseType": "BaseEntity"
+        },
+        {
+            "value": {
+                "value": "http://keycloak.intranet.pnet/realms/openslice",
+                "alias": null
+            },
+            "name": "EXTERNAL_TMF_API_OAUTH2_TOKEN_URI",
+            "@baseType": "BaseEntity"
+        },
+        {
+            "value": {
+                "value": "admin;read",
+                "alias": null
+            },
+            "name": "EXTERNAL_TMF_API_OAUTH2_SCOPES",
+            "@baseType": "BaseEntity"
+        },
+        {
+            "value": {
+                "value": "authOpensliceProvider",
+                "alias": null
+            },
+            "name": "EXTERNAL_TMF_API_CLIENT_REGISTRATION_ID",
+            "@baseType": "BaseEntity"
+        },
+        {
+            "value": {
+                "value": "osapiWebClientId",
+                "alias": null
+            },
+            "name": "EXTERNAL_TMF_API_OAUTH2_CLIENT_ID",
+            "@baseType": "BaseEntity"
+        },
+        {
+            "value": {
+                "value": "true",
+                "alias": null
+            },
+            "name": "IS_COMMENTED",
+            "@baseType": "BaseEntity"
+        }
+    ],
+    "@schemaLocation": "",
+    "@type": "Organization"
+}
