@@ -304,7 +304,10 @@ EXCLUDE_NAMES = {
     "Mining Data Logger",
     "PowerFleet TEST",
     "Create kubernetes cluster",
-    "Create virtual machine"
+    "Create virtual machine",
+    "Run playbook",
+    "Install seismic simulator",
+    "Install executor"
 }
 
 EXCLUDE_TYPES = {
