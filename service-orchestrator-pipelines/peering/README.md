@@ -46,10 +46,13 @@ runs on the Jenkins agent labeled **`doc-vm`**.
 
 ### 🔐 HypO / Keycloak Authentication
 
-  **Parameter**   **Description**
-  --------------- ----------------------------------------
-  `KC_USERNAME`   HypO (Keycloak) username  
-  `KC_PASSWORD`   HypO (Keycloak) password *(masked)*
+The HypO credentials are **not build parameters**. They are read from
+Jenkins credentials:
+
+  **Credential ID**         **Type**            **Used for**
+  ------------------------- ------------------- ----------------------------------------------
+  `hypo_kc_credentials`     Username/Password   HypO (Keycloak) user (`KC_USERNAME` / `KC_PASSWORD`)
+  `tmf_api_client_secret`   Secret text         OAuth2 client secret of `tmf-api`
 
 ------------------------------------------------------------------------
 
