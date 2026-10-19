@@ -1,0 +1,247 @@
+pipeline {
+  agent { node { label 'doc-vm' } }
+
+  parameters {
+    booleanParam(name: 'DRY_RUN', defaultValue: false, description: 'If checked, only report missing peerings; do not send emails')
+  }
+
+  environment {
+    TOKEN_URL = "http://auth.multi-domain-orchestrator.cop-pilot.rid-intrasoft.eu:30081/realms/tmf/protocol/openid-connect/token"
+    CLIENT_ID = "tmf-api"
+
+    PEERING_API_BASE = "http://135.181.84.48:30093"
+    PEERING_PATH     = "/peering-api/peering"
+
+    SMTP_HOST    = "smtp.gmail.com"
+    SMTP_PORT    = "587"
+    SENDER_EMAIL = "rid.devops.1@gmail.com"
+  }
+
+  options { timestamps() }
+
+  stages {
+    stage('Get OAuth Token') {
+      steps {
+        withCredentials([
+          usernamePassword(credentialsId: 'hypo_kc_credentials', usernameVariable: 'KC_USERNAME', passwordVariable: 'KC_PASSWORD'),
+          string(credentialsId: 'tmf_api_client_secret', variable: 'KC_CLIENT_SECRET')
+        ]) {
+          sh '''#!/usr/bin/env bash
+set -euo pipefail
+
+test -n "${KC_USERNAME}" || { echo "KC_USERNAME is empty"; exit 2; }
+test -n "${KC_PASSWORD}" || { echo "KC_PASSWORD is empty"; exit 2; }
+
+HTTP_CODE=$(curl -sS -o token_body.json -w "%{http_code}" -X POST "$TOKEN_URL" \
+  -H "Content-Type: application/x-www-form-urlencoded" \
+  -H "Accept: application/json" \
+  --data-urlencode "grant_type=password" \
+  --data-urlencode "client_id=$CLIENT_ID" \
+  --data-urlencode "client_secret=$KC_CLIENT_SECRET" \
+  --data-urlencode "username=$KC_USERNAME" \
+  --data-urlencode "password=$KC_PASSWORD" || true)
+
+echo "Token HTTP status: ${HTTP_CODE}"
+
+if [ "$HTTP_CODE" != "200" ]; then
+  echo "Token request failed. Body preview:"
+  head -c 400 token_body.json || true
+  echo
+  exit 2
+fi
+
+ACCESS_TOKEN=$(python3 - <<'PY'
+import json
+with open("token_body.json","r",encoding="utf-8",errors="replace") as f:
+    data=json.load(f)
+print(data["access_token"])
+PY
+)
+
+test -n "$ACCESS_TOKEN"
+echo "Token acquired successfully (not printing it)."
+printf "%s" "$ACCESS_TOKEN" > access_token.txt
+'''
+        }
+      }
+    }
+
+    stage('Get Active Peerings') {
+      steps {
+        sh '''#!/usr/bin/env bash
+set -euo pipefail
+
+TOKEN=$(cat access_token.txt)
+URL="${PEERING_API_BASE}${PEERING_PATH}"
+echo "GET ${URL}"
+
+HTTP_CODE=$(curl -sS -o peerings.json -w "%{http_code}" -X GET "$URL" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Accept: application/json" || true)
+
+echo "Peering HTTP status: ${HTTP_CODE}"
+
+if [ "$HTTP_CODE" != "200" ]; then
+  echo "ERROR: Get peerings failed. Body preview:"
+  head -c 400 peerings.json || true
+  echo
+  exit 2
+fi
+
+python3 - <<'PY'
+import json
+
+with open("peerings.json", "r", encoding="utf-8") as f:
+    resp = json.load(f)
+
+if not isinstance(resp, list):
+    raise SystemExit("ERROR: peerings.json is not a JSON array")
+
+names = []
+print("==== Active peerings ====")
+for obj in resp:
+    if not isinstance(obj, dict) or not obj.get("name"):
+        continue
+    names.append(obj["name"])
+    print(f"- {obj['name']} (id={obj.get('id')}, baseUrl={obj.get('baseUrl')})")
+print(f"==== Total: {len(names)} ====")
+
+with open("peered_names.txt", "w", encoding="utf-8") as f:
+    f.write("\\n".join(sorted(set(names))) + "\\n")
+PY
+'''
+        archiveArtifacts artifacts: 'peered_names.txt', allowEmptyArchive: true
+      }
+    }
+
+    stage('Check Expected Peerings') {
+      steps {
+        sh '''#!/usr/bin/env bash
+set -euo pipefail
+
+python3 - <<'PY'
+import json
+
+# Organizations that must be peered with HypO -> recipients notified when the peering is missing
+EXPECTED_PEERS = {
+    "openslice-central":    ["panagiotis.matzakos@netcompany.com", "konstantinos.fragkos@netcompany.com"],
+    "openslice-cl1-rise":   ["nicolas.tsiftes@ri.se"],
+    "openslice-cl2-upv":    ["mcreagu@iteam.upv.es"],
+    "openslice-cl2-port":   ["jmhigon@fundacion.valenciaport.com"],
+    "openslice-cl3a-ilink": ["konstantinos.fragkos@netcompany.com"],
+    "openslice-cl3a-aua":   ["thkyriakidis@agroapps.gr"],
+    "openslice-cl3a-aga":   ["thkyriakidis@agroapps.gr"],
+    "openslice-cl3e-pnet":  ["ktratzas@ece.upatras.gr"],
+    "openslice-cl3e-bpo":   ["brodimas@enakronic.eu"],
+    "openslice-cl4-one":    ["konstantinos.fragkos@netcompany.com"],
+    "openslice-cl4-jig":    ["konstantinos.fragkos@netcompany.com"],
+    "openslice-cl4-nokia":  ["joaquin.perez_otero.ext@nokia.com", "jaime_jesus.ruiz_alonso@nokia.com"],
+}
+
+with open("peered_names.txt", "r", encoding="utf-8") as f:
+    peered = {line.strip() for line in f if line.strip()}
+
+missing = {name: rcpts for name, rcpts in EXPECTED_PEERS.items() if name not in peered}
+unexpected = sorted(peered - EXPECTED_PEERS.keys())
+
+print("==== Peering status ====")
+for name in EXPECTED_PEERS:
+    print(f"{'UP     ' if name in peered else 'MISSING'}  {name}")
+if unexpected:
+    print("Peered but not in expected list (ignored): " + ", ".join(unexpected))
+
+with open("missing_peers.json", "w", encoding="utf-8") as f:
+    json.dump(missing, f, indent=2)
+
+# Plain-text list for Jenkins (read with readFile, no extra plugin needed)
+with open("missing_orgs.txt", "w", encoding="utf-8") as f:
+    f.write(", ".join(missing.keys()))
+
+print(f"==== Missing: {len(missing)} ====")
+PY
+'''
+        script {
+          def missing = readFile('missing_orgs.txt').trim()
+          if (missing) {
+            currentBuild.result = 'UNSTABLE'
+            currentBuild.description = "Missing: ${missing}"
+          } else {
+            currentBuild.description = 'All expected peerings are up'
+          }
+        }
+      }
+    }
+
+    stage('Notify Missing Peerings') {
+      when { expression { return readFile('missing_orgs.txt').trim() != '' } }
+      steps {
+        withCredentials([string(credentialsId: 'peering_alert_sender_password', variable: 'SENDER_PASSWORD')]) {
+          sh '''#!/usr/bin/env bash
+set -euo pipefail
+
+python3 - <<'PY'
+import json, os, smtplib
+from email.message import EmailMessage
+
+CC = ["panagiotis.matzakos@netcompany.com", "konstantinos.fragkos@netcompany.com", "hypo@ubitech.eu"]
+
+SUBJECT = "[COP-PILOT] Openslice–HypO Peering Disconnected"
+BODY = """Hello,
+
+Your OpenSlice (OSL) instance is currently not peered with HypO. Please follow the steps below to troubleshoot the issue and restore the peering connection:
+
+1. Check your OpenSlice instance: Ensure that your OSL instance is running properly.
+
+2. Verify your CloudZiti identity: Check whether your OSL identity is online in CloudZiti. If it is offline, re-enable the corresponding service.
+
+3. Contact the NETC team: Once you have completed the checks above, contact the NETC team and request that they rerun the peering pipeline.
+
+Please complete these steps to help restore the peering connection.
+
+Best regards,
+COP-PILOT CI/CD Automation Platform
+"""
+
+dry_run = os.environ.get("DRY_RUN", "false").lower() == "true"
+sender = os.environ["SENDER_EMAIL"]
+
+with open("missing_peers.json", "r", encoding="utf-8") as f:
+    missing = json.load(f)
+
+# One separate email per missing organization
+messages = []
+for org, recipients in missing.items():
+    msg = EmailMessage()
+    msg["From"] = sender
+    msg["To"] = ", ".join(recipients)
+    msg["Cc"] = ", ".join(CC)
+    msg["Subject"] = SUBJECT
+    msg.set_content(BODY)
+    messages.append((org, msg, sorted(set(recipients + CC))))
+
+if dry_run:
+    for org, msg, rcpts in messages:
+        print(f"[DRY_RUN] Would email {org}: To={msg['To']} Cc={msg['Cc']}")
+    raise SystemExit(0)
+
+with smtplib.SMTP(os.environ["SMTP_HOST"], int(os.environ["SMTP_PORT"]), timeout=30) as smtp:
+    smtp.starttls()
+    smtp.login(sender, os.environ["SENDER_PASSWORD"])
+    for org, msg, rcpts in messages:
+        smtp.send_message(msg, from_addr=sender, to_addrs=rcpts)
+        print(f"Email sent for {org}: To={msg['To']} Cc={msg['Cc']}")
+PY
+'''
+        }
+      }
+    }
+  }
+
+  post {
+    always {
+      sh '''#!/usr/bin/env bash
+rm -f access_token.txt token_body.json peerings.json missing_peers.json missing_orgs.txt || true
+'''
+    }
+  }
+}
