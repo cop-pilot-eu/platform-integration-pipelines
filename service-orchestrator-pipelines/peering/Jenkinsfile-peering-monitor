@@ -134,7 +134,7 @@ EXPECTED_PEERS = {
     "openslice-cl3e-pnet":  ["ktratzas@ece.upatras.gr"],
     "openslice-cl3e-bpo":   ["brodimas@enakronic.eu"],
     "openslice-cl4-one":    ["konstantinos.fragkos@netcompany.com"],
-    "openslice-cl4-jig":    ["konstantinos.fragkos@netcompany.com"],
+    "openslice-cl4-jig":    ["pcorzana@jig.es", "jgurria@jig.es"],
     "openslice-cl4-nokia":  ["joaquin.perez_otero.ext@nokia.com", "jaime_jesus.ruiz_alonso@nokia.com"],
 }
 
