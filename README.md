@@ -74,13 +74,22 @@ parameters, and validation steps
 **Path:** `service-orchestrator-pipelines/peering/`
 
 Pipelines responsible for **TMF organization onboarding and service
-peering** between Maestro and OpenSlice.
+peering** between Maestro and OpenSlice, and for **monitoring** that
+the expected peerings stay up.
 
-**Contents:** - `Jenkinsfile` --- Main peering pipeline (organization
-creation, peering initiation, catalog enrichment) - `Jenkinsfile-v1` ---
-Legacy / previous version of the peering pipeline - `templates/` --- TMF
-JSON templates used by the pipeline - `README.md` --- Detailed
-documentation of the peering workflow, parameters, and API interactions
+**Contents:**
+
+- `Jenkinsfile` --- Main peering pipeline (organization creation,
+  peering initiation, catalog enrichment)
+- `Jenkinsfile-pnet` --- Variant of the peering pipeline for OpenSlice
+  domains on the private `pnet` network (separate Keycloak URL)
+- `Jenkinsfile-v1` --- Legacy / previous version of the peering pipeline
+- `Jenkinsfile-peering-monitor` --- Checks HypO for the list of active
+  peerings, marks the build `UNSTABLE` when an expected OpenSlice domain
+  is missing, and emails that domain's contacts
+- `templates/` --- TMF JSON templates used by the peering pipelines
+- `README.md` --- Detailed documentation of the peering workflow, the
+  peering monitor, parameters, and API interactions
 
 ------------------------------------------------------------------------
 
