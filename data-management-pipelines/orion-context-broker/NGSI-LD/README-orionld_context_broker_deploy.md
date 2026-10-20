@@ -138,6 +138,14 @@ Confirms NGSI-LD is running (expects `"orionld version"`).
 
 ------------------------------------------------------------------------
 
+## 🔄 Updating Orion-LD
+
+To move a running stack to the latest Orion-LD image without touching
+MongoDB, use `Jenkinsfile.orionld-context-broker-update`. See
+`README-orionld_context_broker_update.md`.
+
+------------------------------------------------------------------------
+
 ## 🔗 Documentation
 
 -   FIWARE Orion-LD Docs\

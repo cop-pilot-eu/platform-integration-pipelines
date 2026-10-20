@@ -1,0 +1,328 @@
+/************************************************************
+ * Smoke test helper (used after the update and after a rollback)
+ ************************************************************/
+def smokeTest() {
+    sh '''#!/usr/bin/env bash
+      set -euo pipefail
+
+      echo "Waiting for Orion-LD to become healthy on port ${ORION_LD_PORT}..."
+
+      ATTEMPTS=30
+      SLEEP_SECONDS=2
+      SUCCESS=0
+
+      for i in $(seq 1 $ATTEMPTS); do
+        if curl -sSf "http://localhost:${ORION_LD_PORT}/version" >/dev/null 2>&1; then
+          echo "Orion-LD is UP (attempt $i)"
+          SUCCESS=1
+          break
+        fi
+        echo "Orion-LD not ready yet (attempt $i/${ATTEMPTS}) - retrying in ${SLEEP_SECONDS}s..."
+        sleep "${SLEEP_SECONDS}"
+      done
+
+      if [ "$SUCCESS" -ne 1 ]; then
+        echo "ERROR: Orion-LD did not become healthy within the expected time." >&2
+        docker ps
+        exit 1
+      fi
+
+      echo "Orion-LD /version:"
+      curl -sS "http://localhost:${ORION_LD_PORT}/version"
+      echo
+    '''
+}
+
+pipeline {
+    /************************************************************
+     * PARAMETERS
+     ************************************************************/
+    parameters {
+        // Must be the same node where the Orion-LD stack was deployed
+        string(
+            name: 'NODE_LABEL',
+            defaultValue: 'orionld-node',
+            description: 'Jenkins node label where the Orion-LD stack is running'
+        )
+
+        string(
+            name: 'ORION_LD_PORT',
+            defaultValue: '1026',
+            description: 'Host port Orion-LD is exposed on (used for the smoke test)'
+        )
+
+        booleanParam(
+            name: 'FORCE_RECREATE',
+            defaultValue: false,
+            description: 'Recreate the Orion-LD container even if the image is already up to date'
+        )
+
+        booleanParam(
+            name: 'ROLLBACK_ON_FAILURE',
+            defaultValue: true,
+            description: 'If the smoke test fails after the update, roll back to the previous image'
+        )
+
+        booleanParam(
+            name: 'PRUNE_OLD_IMAGE',
+            defaultValue: false,
+            description: 'Remove the previous Orion-LD image after a successful update (no manual rollback possible afterwards)'
+        )
+    }
+
+    /************************************************************
+     * AGENT
+     ************************************************************/
+    agent {
+        label "${params.NODE_LABEL}"
+    }
+
+    /************************************************************
+     * GLOBAL OPTIONS / ENV
+     ************************************************************/
+    environment {
+        // Must match the deploy pipeline (Jenkinsfile.orionld-context-broker-deploy)
+        STACK_NAME   = 'cop-pilot-orionld'
+        SERVICE_NAME = 'orion-ld'
+
+        ORION_LD_PORT = "${params.ORION_LD_PORT}"
+    }
+
+    /************************************************************
+     * STAGES
+     ************************************************************/
+    stages {
+
+        stage('Docker sanity check') {
+            steps {
+                sh '''#!/usr/bin/env bash
+                  set -euo pipefail
+
+                  echo "Using node: ${NODE_NAME}"
+                  docker version
+
+                  if docker compose version >/dev/null 2>&1; then
+                    echo "compose" > compose_cmd.txt
+                  elif docker-compose version >/dev/null 2>&1; then
+                    echo "legacy" > compose_cmd.txt
+                  else
+                    echo "ERROR: Neither 'docker compose' nor 'docker-compose' is available." >&2
+                    exit 1
+                  fi
+                '''
+            }
+        }
+
+        stage('Inspect running Orion-LD') {
+            steps {
+                sh '''#!/usr/bin/env bash
+                  set -euo pipefail
+
+                  CID=$(docker ps -a \
+                    --filter "label=com.docker.compose.project=${STACK_NAME}" \
+                    --filter "label=com.docker.compose.service=${SERVICE_NAME}" \
+                    -q | head -n1)
+
+                  if [ -z "${CID}" ]; then
+                    echo "ERROR: No '${SERVICE_NAME}' container found for compose project '${STACK_NAME}'." >&2
+                    echo "Deploy the stack first with Jenkinsfile.orionld-context-broker-deploy." >&2
+                    exit 1
+                  fi
+
+                  IMAGE_REF=$(docker inspect -f '{{.Config.Image}}' "${CID}")
+                  PREV_IMAGE_ID=$(docker inspect -f '{{.Image}}' "${CID}")
+                  COMPOSE_DIR=$(docker inspect -f '{{index .Config.Labels "com.docker.compose.project.working_dir"}}' "${CID}")
+                  COMPOSE_FILES=$(docker inspect -f '{{index .Config.Labels "com.docker.compose.project.config_files"}}' "${CID}")
+
+                  echo "Container:        ${CID}"
+                  echo "Image reference:  ${IMAGE_REF}"
+                  echo "Current image ID: ${PREV_IMAGE_ID}"
+                  echo "Compose dir:      ${COMPOSE_DIR}"
+                  echo "Compose file(s):  ${COMPOSE_FILES}"
+
+                  if [ -z "${COMPOSE_FILES}" ]; then
+                    echo "ERROR: Container has no compose config_files label; cannot locate the compose file." >&2
+                    exit 1
+                  fi
+
+                  # config_files is comma-separated; every file must still exist
+                  IFS=',' read -ra FILES <<< "${COMPOSE_FILES}"
+                  for f in "${FILES[@]}"; do
+                    if [ ! -f "${f}" ]; then
+                      echo "ERROR: Compose file '${f}' no longer exists (was the deploy job workspace wiped?)." >&2
+                      echo "Re-run Jenkinsfile.orionld-context-broker-deploy instead." >&2
+                      exit 1
+                    fi
+                  done
+
+                  echo "${IMAGE_REF}"     > image_ref.txt
+                  echo "${PREV_IMAGE_ID}" > prev_image_id.txt
+                  echo "${COMPOSE_DIR}"   > compose_dir.txt
+                  echo "${COMPOSE_FILES}" > compose_files.txt
+
+                  echo "Version before update:"
+                  curl -sS "http://localhost:${ORION_LD_PORT}/version" | tee version_before.json || \
+                    echo "(could not read /version from the running container)"
+                  echo
+                '''
+            }
+        }
+
+        stage('Pull latest image') {
+            steps {
+                sh '''#!/usr/bin/env bash
+                  set -euo pipefail
+
+                  IMAGE_REF=$(cat image_ref.txt)
+                  PREV_IMAGE_ID=$(cat prev_image_id.txt)
+
+                  echo "Pulling ${IMAGE_REF}..."
+                  docker pull "${IMAGE_REF}"
+
+                  NEW_IMAGE_ID=$(docker image inspect -f '{{.Id}}' "${IMAGE_REF}")
+                  echo "${NEW_IMAGE_ID}" > new_image_id.txt
+
+                  echo "Previous image ID: ${PREV_IMAGE_ID}"
+                  echo "Pulled image ID:   ${NEW_IMAGE_ID}"
+                '''
+                script {
+                    def prevId = readFile('prev_image_id.txt').trim()
+                    def newId  = readFile('new_image_id.txt').trim()
+                    env.UPDATE_NEEDED = (prevId != newId || params.FORCE_RECREATE) ? 'true' : 'false'
+
+                    if (prevId == newId) {
+                        echo params.FORCE_RECREATE ?
+                            "Image already up to date, recreating anyway (FORCE_RECREATE=true)." :
+                            "Image already up to date. Nothing to do."
+                    } else {
+                        echo "A newer image is available, Orion-LD will be recreated."
+                    }
+                }
+            }
+        }
+
+        stage('Recreate Orion-LD') {
+            when { expression { env.UPDATE_NEEDED == 'true' } }
+            steps {
+                sh '''#!/usr/bin/env bash
+                  set -euo pipefail
+
+                  if [ "$(cat compose_cmd.txt)" = "compose" ]; then
+                    COMPOSE_CMD="docker compose"
+                  else
+                    COMPOSE_CMD="docker-compose"
+                  fi
+
+                  COMPOSE_DIR=$(cat compose_dir.txt)
+                  F_ARGS=()
+                  IFS=',' read -ra FILES < compose_files.txt
+                  for f in "${FILES[@]}"; do F_ARGS+=(-f "${f}"); done
+
+                  cd "${COMPOSE_DIR}"
+
+                  # --no-deps: leave MongoDB (and its data volume) untouched
+                  echo "Recreating ${SERVICE_NAME}..."
+                  $COMPOSE_CMD -p "${STACK_NAME}" "${F_ARGS[@]}" up -d --no-deps --force-recreate "${SERVICE_NAME}"
+
+                  echo "Current stack status:"
+                  $COMPOSE_CMD -p "${STACK_NAME}" "${F_ARGS[@]}" ps
+                '''
+            }
+        }
+
+        stage('Smoke test: Orion-LD /version') {
+            when { expression { env.UPDATE_NEEDED == 'true' } }
+            steps {
+                script {
+                    try {
+                        smokeTest()
+                    } catch (err) {
+                        if (!params.ROLLBACK_ON_FAILURE) {
+                            throw err
+                        }
+
+                        echo "Smoke test failed, rolling back to the previous image..."
+                        sh '''#!/usr/bin/env bash
+                          set -euo pipefail
+
+                          if [ "$(cat compose_cmd.txt)" = "compose" ]; then
+                            COMPOSE_CMD="docker compose"
+                          else
+                            COMPOSE_CMD="docker-compose"
+                          fi
+
+                          IMAGE_REF=$(cat image_ref.txt)
+                          PREV_IMAGE_ID=$(cat prev_image_id.txt)
+                          COMPOSE_DIR=$(cat compose_dir.txt)
+                          F_ARGS=()
+                          IFS=',' read -ra FILES < compose_files.txt
+                          for f in "${FILES[@]}"; do F_ARGS+=(-f "${f}"); done
+
+                          echo "Container logs of the failed update:"
+                          FAILED_CID=$(docker ps -a \
+                            --filter "label=com.docker.compose.project=${STACK_NAME}" \
+                            --filter "label=com.docker.compose.service=${SERVICE_NAME}" \
+                            -q | head -n1)
+                          docker logs --tail 100 "${FAILED_CID}" 2>&1 || true
+
+                          # Point the tag back at the previous image so compose uses it
+                          docker tag "${PREV_IMAGE_ID}" "${IMAGE_REF}"
+
+                          cd "${COMPOSE_DIR}"
+                          $COMPOSE_CMD -p "${STACK_NAME}" "${F_ARGS[@]}" up -d --no-deps --force-recreate "${SERVICE_NAME}"
+                        '''
+                        smokeTest()
+                        env.ROLLED_BACK = 'true'
+                        error("Update failed its smoke test and was rolled back to ${readFile('prev_image_id.txt').trim()}.")
+                    }
+                }
+            }
+        }
+
+        stage('Prune previous image') {
+            when {
+                expression { env.UPDATE_NEEDED == 'true' && params.PRUNE_OLD_IMAGE }
+            }
+            steps {
+                sh '''#!/usr/bin/env bash
+                  set -euo pipefail
+
+                  PREV_IMAGE_ID=$(cat prev_image_id.txt)
+                  NEW_IMAGE_ID=$(cat new_image_id.txt)
+
+                  if [ "${PREV_IMAGE_ID}" != "${NEW_IMAGE_ID}" ]; then
+                    echo "Removing previous image ${PREV_IMAGE_ID}..."
+                    docker image rm "${PREV_IMAGE_ID}" || echo "Could not remove previous image (still in use?), skipping."
+                  fi
+                '''
+            }
+        }
+    }
+
+    /************************************************************
+     * POST ACTIONS
+     ************************************************************/
+    post {
+        success {
+            script {
+                if (env.UPDATE_NEEDED == 'true') {
+                    echo "✅ Orion-LD updated on node '${params.NODE_LABEL}'."
+                } else {
+                    echo "✅ Orion-LD already up to date on node '${params.NODE_LABEL}'."
+                }
+            }
+        }
+        failure {
+            script {
+                if (env.ROLLED_BACK == 'true') {
+                    echo "⚠️ Orion-LD update failed and was rolled back on node '${params.NODE_LABEL}'."
+                } else {
+                    echo "❌ Orion-LD update failed. Check logs above on node '${params.NODE_LABEL}'."
+                }
+            }
+        }
+        always {
+            sh 'rm -f compose_cmd.txt image_ref.txt prev_image_id.txt new_image_id.txt compose_dir.txt compose_files.txt version_before.json'
+        }
+    }
+}

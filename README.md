@@ -51,7 +51,12 @@ semantic context broker.
 **Contents:** - `Jenkinsfile.orionld-context-broker-deploy` --- Deploys
 Orion‑LD and MongoDB with health checks -
 `README-orionld_context_broker_deploy.md` --- Parameters, pipeline
-stages, endpoints, and troubleshooting
+stages, endpoints, and troubleshooting -
+`Jenkinsfile.orionld-context-broker-update` --- Updates the running
+Orion‑LD container to the latest image (MongoDB untouched), with
+smoke test and automatic rollback -
+`README-orionld_context_broker_update.md` --- Update pipeline
+parameters, stages, and rollback notes
 
 ------------------------------------------------------------------------
 
