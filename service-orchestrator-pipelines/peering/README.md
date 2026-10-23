@@ -358,3 +358,210 @@ EXPECTED_PEERS = {
   `SUCCESS`    All expected peerings are up, and no emails were sent
   `UNSTABLE`   One or more peerings are missing, and alert emails were sent (unless `DRY_RUN`)
   `FAILURE`    Token request, peering API call, or SMTP delivery failed
+
+------------------------------------------------------------------------
+------------------------------------------------------------------------
+
+# ✂️ Unpeering Pipeline
+
+**File:** `Jenkinsfile-unpeering`
+
+## 📌 Overview
+
+This pipeline **removes a peered organization from HypO**. It looks up
+the organization by name in the HypO TMF Party API and deletes it by
+its `id`.
+
+It is the reverse of the peering pipeline. Because the peering pipeline
+creates a new organization on every run, use this pipeline to clean up
+a domain before peering it again, or when a domain is decommissioned.
+
+------------------------------------------------------------------------
+
+## 🔄 High-Level Flow
+
+1.  🔐 Authenticate against HypO (OAuth2)
+2.  🔍 Find the organization `id` by name
+3.  🗑️ Delete the organization
+4.  🧹 Clean up temporary files
+
+------------------------------------------------------------------------
+
+## 🖥️ Jenkins Agent
+
+-   **Agent label:** `doc-vm`
+-   **Required tools:** `curl`, `python3`
+
+------------------------------------------------------------------------
+
+## ⚙️ Pipeline Parameters
+
+  **Parameter**     **Description**
+  ----------------- ------------------------------------------------------------
+  `TMF_PARTY_ORG`   Name of the organization to remove (e.g. `openslice-cl4-jig`)
+
+------------------------------------------------------------------------
+
+## 🔐 Jenkins Credentials
+
+  **Credential ID**         **Type**            **Used for**
+  ------------------------- ------------------- ------------------------------------------
+  `hypo_kc_credentials`     Username/Password   HypO (Keycloak) user for the token request
+  `tmf_api_client_secret`   Secret text         OAuth2 client secret of `tmf-api`
+
+------------------------------------------------------------------------
+
+## 🧪 Environment Variables
+
+-   🔑 `TOKEN_URL` -- OAuth2 token endpoint
+-   🆔 `CLIENT_ID` -- OAuth2 client ID (`tmf-api`)
+-   🧩 `MAESTRO_TMF_BASE` -- HypO TMF API base URL
+-   🏢 `ORG_PATH` -- TMF Organization path
+    (`/tmf-api/party/v4/organization`)
+
+------------------------------------------------------------------------
+
+## 🧱 Pipeline Stages
+
+### 1️⃣ Get OAuth Token
+
+-   Fails early if `TMF_PARTY_ORG` is empty
+-   Gets an access token with a **Resource Owner Password Grant**, the
+    same way as the peering pipeline
+
+------------------------------------------------------------------------
+
+### 2️⃣ Find Organization ID
+
+-   Sends `GET ${MAESTRO_TMF_BASE}/tmf-api/party/v4/organization`
+-   Matches `TMF_PARTY_ORG` against each organization's `name`, ignoring
+    leading and trailing whitespace (HypO may store names like
+    `" openslice-cl4-jig"`)
+-   Fails if **no** organization matches, and lists the existing ones
+-   Fails if **more than one** organization matches, and lists their
+    ids. Nothing is deleted in that case (see Troubleshooting)
+
+------------------------------------------------------------------------
+
+### 3️⃣ Delete Organization in Maestro TMF
+
+-   Sends `DELETE ${MAESTRO_TMF_BASE}/tmf-api/party/v4/organization/<id>`
+-   Accepts HTTP `200`, `202` or `204`
+-   Sets the build description to `Removed: <org>`
+
+------------------------------------------------------------------------
+
+## 🧹 Post Actions (Cleanup)
+
+-   Deletes `access_token.txt`, `token_body.json`, `organizations.json`,
+    `org_id.txt`, and `delete_org_resp.json`
+
+------------------------------------------------------------------------
+
+## 🛠️ Troubleshooting & Notes
+
+-   **Several organizations with the same name:** this happens when the
+    peering pipeline was run more than once for a domain. The log lists
+    every matching `id`. Delete the extra ones by hand with
+    `DELETE .../tmf-api/party/v4/organization/<id>`, then rerun this
+    pipeline for the remaining one.
+-   **Peering monitor:** if the domain is removed for good, also remove
+    it from `EXPECTED_PEERS` in `Jenkinsfile-peering-monitor`, or the
+    monitor will report it as missing.
+
+------------------------------------------------------------------------
+------------------------------------------------------------------------
+
+# 🧨 Unpeering All Pipeline
+
+**File:** `Jenkinsfile-unpeering-all`
+
+## 📌 Overview
+
+This pipeline **removes every organization from HypO except
+`UBITECH`**. Use it to clean up HypO completely before running the
+peering procedure again for all domains.
+
+> ⚠️ This is destructive. It runs as a **dry run by default** and only
+> lists what it would delete. Uncheck `DRY_RUN` to actually delete.
+
+------------------------------------------------------------------------
+
+## 🔄 High-Level Flow
+
+1.  🔐 Authenticate against HypO (OAuth2)
+2.  📋 List all organizations and pick the ones to delete
+3.  🗑️ Delete them one by one (skipped when `DRY_RUN` is checked)
+4.  🧹 Clean up temporary files
+
+------------------------------------------------------------------------
+
+## 🖥️ Jenkins Agent
+
+-   **Agent label:** `doc-vm`
+-   **Required tools:** `curl`, `python3`
+
+------------------------------------------------------------------------
+
+## ⚙️ Pipeline Parameters
+
+  **Parameter**   **Default**   **Description**
+  --------------- ------------- --------------------------------------------------------------
+  `DRY_RUN`       `true`        If checked, only list the organizations that would be deleted
+
+------------------------------------------------------------------------
+
+## 🔐 Jenkins Credentials
+
+Same as the unpeering pipeline: `hypo_kc_credentials` and
+`tmf_api_client_secret`.
+
+------------------------------------------------------------------------
+
+## 🧱 Pipeline Stages
+
+### 1️⃣ Get OAuth Token
+
+-   Gets an access token with a **Resource Owner Password Grant**, the
+    same way as the peering pipeline
+
+------------------------------------------------------------------------
+
+### 2️⃣ List Organizations to Delete
+
+-   Sends `GET ${MAESTRO_TMF_BASE}/tmf-api/party/v4/organization`
+-   Logs every organization as `KEEP`, `DELETE`, or `SKIP` (no `id`)
+-   Organizations whose name is in `KEEP_ORGS` are kept. The comparison
+    ignores case and leading/trailing whitespace. By default
+    `KEEP_ORGS = {"UBITECH"}`
+
+------------------------------------------------------------------------
+
+### 3️⃣ Delete Organizations in Maestro TMF
+
+-   With `DRY_RUN=true`, prints how many organizations would be deleted
+    and stops
+-   Otherwise sends `DELETE .../tmf-api/party/v4/organization/<id>` for
+    each one, accepting HTTP `200`, `202` or `204`
+-   Keeps going if one delete fails, then fails the build at the end
+    with the number of failures
+
+------------------------------------------------------------------------
+
+## 🧹 Post Actions (Cleanup)
+
+-   Deletes `access_token.txt`, `token_body.json`, `organizations.json`,
+    `orgs_to_delete.json`, `orgs_to_delete.tsv`, and
+    `delete_org_resp.json`
+
+------------------------------------------------------------------------
+
+## 🛠️ Notes
+
+-   **Keeping more organizations:** add their names to the `KEEP_ORGS`
+    set in the **List Organizations to Delete** stage
+-   **Peering monitor:** until the domains are peered again, the peering
+    monitor will report all of them as missing and email their
+    contacts. Disable the monitor job while you clean up and re-peer
+-   **Re-peering:** run `Jenkinsfile` (or `Jenkinsfile-pnet`) once for
+    each domain afterwards

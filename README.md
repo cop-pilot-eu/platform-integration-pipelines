@@ -79,8 +79,8 @@ parameters, and validation steps
 **Path:** `service-orchestrator-pipelines/peering/`
 
 Pipelines responsible for **TMF organization onboarding and service
-peering** between Maestro and OpenSlice, and for **monitoring** that
-the expected peerings stay up.
+peering** between HypO and OpenSlice, for **removing** a peered
+organization, and for **monitoring** that the expected peerings stay up.
 
 **Contents:**
 
@@ -92,9 +92,13 @@ the expected peerings stay up.
 - `Jenkinsfile-peering-monitor` --- Checks HypO for the list of active
   peerings, marks the build `UNSTABLE` when an expected OpenSlice domain
   is missing, and emails that domain's contacts
+- `Jenkinsfile-unpeering` --- Removes a peered organization from HypO by
+  name (looks up its id in the TMF Party API and deletes it)
+- `Jenkinsfile-unpeering-all` --- Removes every organization from HypO
+  except `UBITECH` (dry run by default), to clean up before re-peering
 - `templates/` --- TMF JSON templates used by the peering pipelines
 - `README.md` --- Detailed documentation of the peering workflow, the
-  peering monitor, parameters, and API interactions
+  unpeering and peering monitor pipelines, parameters, and API interactions
 
 ------------------------------------------------------------------------
 
