@@ -131,7 +131,7 @@ EXPECTED_PEERS = {
     "openslice-cl3a-ilink": ["vdouvris@ilink.gr", "rozis@ilink.gr"],
     "openslice-cl3a-aua":   ["thkyriakidis@agroapps.gr"],
     "openslice-cl3a-aga":   ["thkyriakidis@agroapps.gr"],
-    "openslice-cl3e-pnet":  ["ktratzas@ece.upatras.gr"],
+    "openslice-cl3e-pnet":  ["ktrantzas@ece.upatras.gr"],
     "openslice-cl3e-bpo":   ["brodimas@enakronic.eu"],
     "openslice-cl4-one":    ["luis.ferreira@onesource.pt", "luis.rosa@onesource.pt", "mario.lourenco@onesource.pt"],
     "openslice-cl4-jig":    ["pcorzana@jig.es", "jgurria@jig.es"],
