@@ -155,8 +155,10 @@ Pipelines for creating and exposing platform services securely through **OpenZit
 Pipelines responsible for deploying and validating the **Domain Orchestrator (OpenSlice)** layer.
 
 **Contents:**
-- `Jenkinsfile.openslice-k8s-deploy` --- Deploys and validates OpenSlice on Kubernetes
+- `Jenkinsfile.openslice-k8s-deploy` --- Deploys a pinned OpenSlice release (e.g. `2025Q4`) on Kubernetes with Helm and validates it
 - `README-openslice-k8s-deploy.md` --- Deployment guide, parameters, prerequisites, and troubleshooting
+- `Jenkinsfile.openslice-k8s-update` --- Updates a running OpenSlice release to a newer version (e.g. `2026Q2`), keeping its configuration and data, with MySQL backup, smoke test and automatic Helm rollback
+- `README-openslice-k8s-update.md` --- Update pipeline parameters, stages, and rollback/restore notes
 
 ------------------------------------------------------------------------
 

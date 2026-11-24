@@ -1,0 +1,506 @@
+/************************************************************
+ * HELPERS
+ ************************************************************/
+// Runs the given body with KUBECONFIG pointing to the Jenkins "Secret file"
+// credential that holds the kubeconfig of the target cluster.
+def withKube(Closure body) {
+    withCredentials([file(credentialsId: params.KUBECONFIG_CREDENTIALS_ID, variable: 'KUBECONFIG')]) {
+        body()
+    }
+}
+
+pipeline {
+    /************************************************************
+     * PARAMETERS
+     ************************************************************/
+    parameters {
+        string(
+            name: 'NODE_LABEL',
+            defaultValue: 'openslice-node',
+            description: 'Jenkins node label where the pipeline runs (needs kubectl, helm >= 3.14, git, curl, gzip)'
+        )
+
+        string(
+            name: 'KUBECONFIG_CREDENTIALS_ID',
+            defaultValue: 'openslice-kubeconfig',
+            description: 'Jenkins credential ID (type: Secret file) with the kubeconfig of the target cluster'
+        )
+
+        string(
+            name: 'TARGET_VERSION',
+            defaultValue: '2026Q2',
+            description: 'OpenSlice release to update to: git tag/branch of org.etsi.osl.main (e.g. 2026Q2, main, develop)'
+        )
+
+        string(
+            name: 'IMAGE_TAG',
+            defaultValue: '',
+            description: 'Tag for the OpenSlice images. Empty = derived from TARGET_VERSION (main -> latest, develop -> develop, otherwise = TARGET_VERSION)'
+        )
+
+        string(
+            name: 'NAMESPACE',
+            defaultValue: 'openslice',
+            description: 'Kubernetes namespace of the running OpenSlice instance'
+        )
+
+        string(
+            name: 'HELM_RELEASE',
+            defaultValue: 'openslice',
+            description: 'Helm release name of the running OpenSlice instance'
+        )
+
+        string(
+            name: 'ROOT_URL',
+            defaultValue: '',
+            description: 'Override the root URL. Empty = keep the root URL of the running release.'
+        )
+
+        string(
+            name: 'HELM_TIMEOUT',
+            defaultValue: '20m',
+            description: 'Timeout for helm upgrade --wait'
+        )
+
+        booleanParam(
+            name: 'BACKUP_DB',
+            defaultValue: true,
+            description: 'Dump all MySQL databases before upgrading and archive the dump as a build artifact'
+        )
+
+        booleanParam(
+            name: 'AUTO_ROLLBACK',
+            defaultValue: true,
+            description: 'Roll back to the previous Helm revision if the upgrade, rollout or smoke test fails'
+        )
+
+        booleanParam(
+            name: 'DRY_RUN',
+            defaultValue: false,
+            description: 'Only validate the upgrade (helm upgrade --dry-run=server), do not change anything'
+        )
+
+        booleanParam(
+            name: 'FORCE_UPDATE',
+            defaultValue: false,
+            description: 'Run the upgrade even if the release is already at TARGET_VERSION (e.g. to re-pull images)'
+        )
+    }
+
+    /************************************************************
+     * AGENT
+     ************************************************************/
+    agent {
+        label "${params.NODE_LABEL}"
+    }
+
+    /************************************************************
+     * ENVIRONMENT
+     ************************************************************/
+    environment {
+        WORK_DIR        = 'openslice-update'
+        REPO_URL        = 'https://labs.etsi.org/rep/osl/code/org.etsi.osl.main.git'
+        CHART_DIR       = 'openslice-update/org.etsi.osl.main/kubernetes/helm/openslice'
+        VALUES_OVERRIDE = 'openslice-update/values-update.yaml'
+        PREV_REV_FILE   = 'openslice-update/previous_revision'
+        STARTED_FILE    = 'openslice-update/upgrade_started'
+        BACKUP_DIR      = 'openslice-backup'
+    }
+
+    options {
+        timestamps()
+        disableConcurrentBuilds()
+    }
+
+    /************************************************************
+     * STAGES
+     ************************************************************/
+    stages {
+
+        // ****************************
+        // *** VALIDATE ENVIRONMENT ***
+        // ****************************
+        stage('Validate environment') {
+            steps {
+                script {
+                    withKube {
+                        sh '''#!/usr/bin/env bash
+                            set -eu
+
+                            rm -rf "${WORK_DIR}" "${BACKUP_DIR}"
+                            mkdir -p "${WORK_DIR}" "${BACKUP_DIR}"
+
+                            for bin in kubectl helm git curl gzip; do
+                                command -v "$bin" >/dev/null 2>&1 || { echo "ERROR: $bin not found"; exit 1; }
+                            done
+
+                            # --reset-then-reuse-values needs Helm >= 3.14
+                            HV=$(helm version --template '{{.Version}}' | sed 's/^v//')
+                            MAJ=${HV%%.*}; MIN=$(echo "$HV" | cut -d. -f2)
+                            echo "helm ${HV}"
+                            if [ "$MAJ" -lt 3 ] || { [ "$MAJ" -eq 3 ] && [ "$MIN" -lt 14 ]; }; then
+                                echo "ERROR: Helm >= 3.14 is required (found ${HV})"
+                                exit 1
+                            fi
+
+                            kubectl cluster-info >/dev/null || { echo "ERROR: Cannot connect to Kubernetes cluster"; exit 1; }
+
+                            if ! helm status "${HELM_RELEASE}" -n "${NAMESPACE}" >/dev/null 2>&1; then
+                                echo "ERROR: Helm release '${HELM_RELEASE}' not found in namespace '${NAMESPACE}'."
+                                echo "Use Jenkinsfile.openslice-k8s-deploy for a fresh installation."
+                                exit 1
+                            fi
+
+                            STATUS=$(helm list -a -n "${NAMESPACE}" --filter "^${HELM_RELEASE}\\$" -o json | grep -o '"status":"[a-z-]*"' | head -1 | cut -d'"' -f4)
+                            if [ "$STATUS" != "deployed" ]; then
+                                echo "ERROR: release status is '${STATUS}', expected 'deployed'. Fix the release before updating."
+                                exit 1
+                            fi
+
+                            echo "===== Current release ====="
+                            helm list -n "${NAMESPACE}" --filter "^${HELM_RELEASE}\\$"
+
+                            helm history "${HELM_RELEASE}" -n "${NAMESPACE}" --max 1 | tail -1 | awk '{print $1}' > "${PREV_REV_FILE}"
+                            echo "Current revision: $(cat "${PREV_REV_FILE}")"
+                        '''
+
+                        def currentVersion = sh(
+                            returnStdout: true,
+                            script: '''helm list -n "${NAMESPACE}" --filter "^${HELM_RELEASE}\\$" -o json | grep -o '"app_version":"[^"]*"' | cut -d'"' -f4'''
+                        ).trim()
+                        echo "Running version: ${currentVersion} -> target version: ${params.TARGET_VERSION}"
+
+                        env.ALREADY_AT_TARGET = (currentVersion == params.TARGET_VERSION && !params.FORCE_UPDATE) ? 'true' : 'false'
+                        if (env.ALREADY_AT_TARGET == 'true') {
+                            echo "Release is already at ${params.TARGET_VERSION}. Nothing to do (set FORCE_UPDATE to run anyway)."
+                        }
+                    }
+                }
+            }
+        }
+
+        // ****************************
+        // *** CLONE TARGET VERSION ***
+        // ****************************
+        stage('Clone OpenSlice repository') {
+            when { environment name: 'ALREADY_AT_TARGET', value: 'false' }
+            steps {
+                sh '''#!/usr/bin/env bash
+                    set -eu
+
+                    echo "Cloning org.etsi.osl.main @ ${TARGET_VERSION}"
+                    git clone --branch "${TARGET_VERSION}" --depth 1 "${REPO_URL}" "${WORK_DIR}/org.etsi.osl.main"
+
+                    echo "Target chart:"
+                    grep -E '^(version|appVersion):' "${CHART_DIR}/Chart.yaml"
+                '''
+            }
+        }
+
+        // ****************************
+        // *** CONFIGURE WEB UIs    ***
+        // ****************************
+        stage('Configure Web UIs') {
+            when { environment name: 'ALREADY_AT_TARGET', value: 'false' }
+            steps {
+                sh '''#!/usr/bin/env bash
+                    set -eu
+
+                    # Web UI configs are (re)generated from the target version's defaults,
+                    # so that version-specific settings (e.g. PORTALVERSION) are updated.
+                    from_default() {
+                        if [ -f "$1/$2" ] && [ ! -f "$1/$3" ]; then
+                            cp "$1/$2" "$1/$3"
+                            echo "Created $3 from $2."
+                        fi
+                    }
+
+                    WEB_JS_DIR="${CHART_DIR}/files/org.etsi.osl.portal.web/src/js"
+                    TMF_CFG_DIR="${CHART_DIR}/files/org.etsi.osl.tmf.web/src/assets/config"
+
+                    from_default "${WEB_JS_DIR}"  config.js.default             config.js
+                    from_default "${TMF_CFG_DIR}" config.prod.default.json      config.prod.json
+                    from_default "${TMF_CFG_DIR}" config.theming.default.json   config.theming.json
+                    from_default "${TMF_CFG_DIR}" theming.default.scss          theming.scss
+                '''
+            }
+        }
+
+        // *********************************
+        // *** PREPARE HELM VALUES       ***
+        // *********************************
+        stage('Prepare Helm values') {
+            when { environment name: 'ALREADY_AT_TARGET', value: 'false' }
+            steps {
+                script {
+                    withKube {
+                        sh '''#!/usr/bin/env bash
+                            set -eu
+
+                            q() { printf "'%s'" "$(printf '%s' "$1" | sed "s/'/''/g")"; }
+
+                            TAG="${IMAGE_TAG}"
+                            if [ -z "$TAG" ]; then
+                                case "${TARGET_VERSION}" in
+                                    main)    TAG=latest ;;
+                                    develop) TAG=develop ;;
+                                    *)       TAG="${TARGET_VERSION}" ;;
+                                esac
+                            fi
+                            echo "Target image tag: ${TAG}"
+
+                            umask 077
+                            {
+                                if [ -n "${ROOT_URL}" ]; then
+                                    echo "rooturl: $(q "${ROOT_URL%/}")"
+                                elif ! helm get values "${HELM_RELEASE}" -n "${NAMESPACE}" -o yaml | grep -q '^rooturl:'; then
+                                    # Release was installed with rooturl edited into the chart's values.yaml:
+                                    # carry the effective value over explicitly.
+                                    helm get values "${HELM_RELEASE}" -n "${NAMESPACE}" --all -o yaml | grep '^rooturl:'
+                                fi
+                                echo "image:"
+                                for img in bugzilla centrallog manoclient osom portalapi osscapi oasapi \
+                                           portalweb tmfweb cridge metrico mcpserver mcpbackend; do
+                                    echo "  ${img}:"
+                                    echo "    tag: $(q "${TAG}")"
+                                done
+                            } > "${VALUES_OVERRIDE}"
+
+                            echo "Update values (applied on top of the release's existing user-supplied values):"
+                            cat "${VALUES_OVERRIDE}"
+
+                            echo ""
+                            echo "Validating upgrade against the cluster (dry-run)..."
+                            helm upgrade "${HELM_RELEASE}" "${CHART_DIR}" \
+                                --namespace "${NAMESPACE}" \
+                                --reset-then-reuse-values \
+                                -f "${VALUES_OVERRIDE}" \
+                                --dry-run=server >/dev/null
+                            echo "Dry-run OK."
+                        '''
+                    }
+                }
+            }
+        }
+
+        // ****************************
+        // *** BACKUP DATABASE      ***
+        // ****************************
+        stage('Backup MySQL') {
+            when {
+                allOf {
+                    environment name: 'ALREADY_AT_TARGET', value: 'false'
+                    expression { return params.BACKUP_DB && !params.DRY_RUN }
+                }
+            }
+            steps {
+                script {
+                    withKube {
+                        sh '''#!/usr/bin/env bash
+                            set -euo pipefail
+
+                            MYSQL_POD=$(kubectl get pods -n "${NAMESPACE}" \
+                                -l "org.etsi.osl.service=mysql,app.kubernetes.io/instance=${HELM_RELEASE}" \
+                                --field-selector=status.phase=Running \
+                                -o jsonpath='{.items[0].metadata.name}')
+                            [ -n "$MYSQL_POD" ] || { echo "ERROR: MySQL pod not found"; exit 1; }
+
+                            DUMP="${BACKUP_DIR}/openslice-mysql-$(date +%Y%m%d-%H%M%S).sql.gz"
+                            echo "Dumping all databases from ${MYSQL_POD} to ${DUMP}..."
+
+                            kubectl exec -n "${NAMESPACE}" "${MYSQL_POD}" -- sh -c \
+                                'exec mysqldump -uroot -p"$MYSQL_ROOT_PASSWORD" --all-databases --single-transaction --routines --events 2>/dev/null' \
+                                | gzip > "${DUMP}"
+
+                            # A valid dump ends with "-- Dump completed"
+                            gzip -dc "${DUMP}" | tail -1 | grep -q 'Dump completed' || { echo "ERROR: MySQL dump is incomplete"; exit 1; }
+                            ls -lh "${DUMP}"
+                        '''
+                    }
+                }
+                archiveArtifacts artifacts: "${env.BACKUP_DIR}/*.sql.gz", fingerprint: false
+            }
+        }
+
+        // ****************************
+        // *** UPGRADE OPENSLICE    ***
+        // ****************************
+        stage('Upgrade OpenSlice') {
+            when {
+                allOf {
+                    environment name: 'ALREADY_AT_TARGET', value: 'false'
+                    expression { return !params.DRY_RUN }
+                }
+            }
+            steps {
+                script {
+                    withKube {
+                        sh '''#!/usr/bin/env bash
+                            set -eu
+
+                            touch "${STARTED_FILE}"
+
+                            echo "Upgrading ${HELM_RELEASE} to ${TARGET_VERSION}..."
+                            helm upgrade "${HELM_RELEASE}" "${CHART_DIR}" \
+                                --namespace "${NAMESPACE}" \
+                                --reset-then-reuse-values \
+                                -f "${VALUES_OVERRIDE}" \
+                                --timeout "${HELM_TIMEOUT}" \
+                                --wait
+
+                            helm list -n "${NAMESPACE}" --filter "^${HELM_RELEASE}\\$"
+                        '''
+                    }
+                }
+            }
+        }
+
+        // ****************************************
+        // *** WAIT FOR WORKLOADS / VERIFY      ***
+        // ****************************************
+        stage('Verify rollout') {
+            when {
+                allOf {
+                    environment name: 'ALREADY_AT_TARGET', value: 'false'
+                    expression { return !params.DRY_RUN }
+                }
+            }
+            steps {
+                script {
+                    withKube {
+                        sh '''#!/usr/bin/env bash
+                            set -eu
+
+                            SEL="app.kubernetes.io/instance=${HELM_RELEASE}"
+                            for w in $(kubectl get deploy,statefulset -n "${NAMESPACE}" -l "${SEL}" -o name); do
+                                kubectl rollout status -n "${NAMESPACE}" "$w" --timeout=10m
+                            done
+
+                            TAG=$(grep -m1 'tag:' "${VALUES_OVERRIDE}" | sed -E "s/.*tag: '(.*)'/\\1/")
+
+                            echo ""
+                            echo "===== OpenSlice images ====="
+                            IMAGES=$(kubectl get pods -n "${NAMESPACE}" -l "${SEL}" \
+                                -o jsonpath='{range .items[*]}{range .spec.containers[*]}{.image}{"\\n"}{end}{end}' \
+                                | grep 'labs.etsi.org:5050/osl/' | sort -u)
+                            echo "${IMAGES}"
+
+                            WRONG=$(echo "${IMAGES}" | grep -v ":${TAG}\\$" || true)
+                            if [ -n "${WRONG}" ]; then
+                                echo "ERROR: images not running tag ${TAG}:"
+                                echo "${WRONG}"
+                                exit 1
+                            fi
+
+                            echo ""
+                            kubectl get pods -n "${NAMESPACE}" -o wide
+                        '''
+                    }
+                }
+            }
+        }
+
+        // ****************************************
+        // *** SMOKE TEST                       ***
+        // ****************************************
+        stage('Smoke test') {
+            when {
+                allOf {
+                    environment name: 'ALREADY_AT_TARGET', value: 'false'
+                    expression { return !params.DRY_RUN }
+                }
+            }
+            steps {
+                script {
+                    withKube {
+                        sh '''#!/usr/bin/env bash
+                            set -eu
+
+                            TEST_URL=$(helm get values "${HELM_RELEASE}" -n "${NAMESPACE}" --all -o yaml \
+                                | grep '^rooturl:' | sed -E "s/^rooturl: *['\\"]?([^'\\"]*)['\\"]?.*/\\1/")
+                            [ -n "$TEST_URL" ] && [ "$TEST_URL" != "null" ] || { echo "ERROR: rooturl not set on release"; exit 1; }
+                            echo "Smoke testing OpenSlice at: ${TEST_URL}"
+
+                            check() {
+                                for i in $(seq 1 30); do
+                                    CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 "${TEST_URL}$2" || true)
+                                    if [[ "$CODE" =~ ^($3)$ ]]; then
+                                        echo "OK   $1 -> HTTP ${CODE}"
+                                        return 0
+                                    fi
+                                    echo "...  $1 -> HTTP ${CODE} (attempt $i/30)"
+                                    sleep 10
+                                done
+                                echo "FAIL $1 (${TEST_URL}$2)"
+                                return 1
+                            }
+
+                            check "TMF Web UI"        "/"                                                   "200"
+                            check "Keycloak realm"    "/auth/realms/openslice"                              "200"
+                            check "TMF Service API"   "/tmf-api/serviceCatalogManagement/v4/serviceCatalog" "200|401"
+
+                            # The TMF Web UI config carries the portal version
+                            if { curl -s --max-time 10 "${TEST_URL}/services/assets/config/config.prod.json";
+                                 curl -s --max-time 10 "${TEST_URL}/assets/config/config.prod.json"; } \
+                                 | grep -q "\\"PORTALVERSION\\":\\"${TARGET_VERSION}\\""; then
+                                echo "OK   TMF Web UI reports PORTALVERSION ${TARGET_VERSION}"
+                            else
+                                echo "NOTE: could not confirm PORTALVERSION ${TARGET_VERSION} from the Web UI config."
+                            fi
+                        '''
+                    }
+                }
+            }
+        }
+    }
+
+    /************************************************************
+     * POST ACTIONS
+     ************************************************************/
+    post {
+        success {
+            script {
+                if (params.DRY_RUN) {
+                    echo "Dry-run finished: upgrade of '${params.HELM_RELEASE}' to ${params.TARGET_VERSION} validated, nothing changed."
+                } else if (env.ALREADY_AT_TARGET == 'true') {
+                    echo "Release '${params.HELM_RELEASE}' already at ${params.TARGET_VERSION}, nothing changed."
+                } else {
+                    echo "OpenSlice '${params.HELM_RELEASE}' updated to ${params.TARGET_VERSION} in namespace '${params.NAMESPACE}'."
+                }
+            }
+        }
+        failure {
+            script {
+                if (params.AUTO_ROLLBACK && fileExists(env.STARTED_FILE)) {
+                    def prevRev = readFile(env.PREV_REV_FILE).trim()
+                    echo "Update failed - rolling back '${params.HELM_RELEASE}' to revision ${prevRev}..."
+                    try {
+                        withKube {
+                            sh """#!/usr/bin/env bash
+                                set -eu
+                                helm rollback "\${HELM_RELEASE}" ${prevRev} -n "\${NAMESPACE}" --wait --timeout "\${HELM_TIMEOUT}"
+                                helm list -n "\${NAMESPACE}" --filter "^\${HELM_RELEASE}\\\$"
+                                kubectl get pods -n "\${NAMESPACE}" -o wide
+                            """
+                        }
+                        echo "Rollback to revision ${prevRev} completed. If the new version migrated the database schema, restore the archived MySQL dump."
+                    } catch (err) {
+                        echo "ROLLBACK FAILED: ${err}. Manual intervention required (helm rollback ${params.HELM_RELEASE} ${prevRev} -n ${params.NAMESPACE})."
+                    }
+                } else {
+                    echo "Update failed before the release was modified (or AUTO_ROLLBACK disabled)."
+                    try {
+                        withKube {
+                            sh 'kubectl get pods -n "${NAMESPACE}" -o wide || true'
+                        }
+                    } catch (err) {
+                        echo "Could not query the cluster: ${err}"
+                    }
+                }
+            }
+        }
+        always {
+            sh 'rm -rf "${WORK_DIR}" "${BACKUP_DIR}" || true'
+        }
+    }
+}
