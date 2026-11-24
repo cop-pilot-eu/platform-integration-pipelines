@@ -1,3 +1,14 @@
+/************************************************************
+ * HELPERS
+ ************************************************************/
+// Runs the given body with KUBECONFIG pointing to the Jenkins "Secret file"
+// credential that holds the kubeconfig of the target cluster.
+def withKube(Closure body) {
+    withCredentials([file(credentialsId: params.KUBECONFIG_CREDENTIALS_ID, variable: 'KUBECONFIG')]) {
+        body()
+    }
+}
+
 pipeline {
     /************************************************************
      * PARAMETERS
@@ -6,13 +17,25 @@ pipeline {
         string(
             name: 'NODE_LABEL',
             defaultValue: 'openslice-node',
-            description: 'Jenkins node label where OpenSlice will be deployed'
+            description: 'Jenkins node label where the pipeline runs (needs kubectl, helm, git, curl)'
         )
 
         string(
-            name: 'GIT_BRANCH',
-            defaultValue: 'main',
-            description: 'Branch of org.etsi.osl.main to deploy (main = stable, develop = latest features)'
+            name: 'KUBECONFIG_CREDENTIALS_ID',
+            defaultValue: 'openslice-kubeconfig',
+            description: 'Jenkins credential ID (type: Secret file) with the kubeconfig of the target cluster'
+        )
+
+        string(
+            name: 'OSL_VERSION',
+            defaultValue: '2025Q4',
+            description: 'OpenSlice release to deploy: git tag/branch of org.etsi.osl.main (e.g. 2025Q4, 2026Q2, main, develop)'
+        )
+
+        string(
+            name: 'IMAGE_TAG',
+            defaultValue: '',
+            description: 'Tag for the OpenSlice images. Empty = derived from OSL_VERSION (main -> latest, develop -> develop, otherwise = OSL_VERSION)'
         )
 
         string(
@@ -30,23 +53,28 @@ pipeline {
         string(
             name: 'ROOT_URL',
             defaultValue: '',
-            description: 'Root URL for OpenSlice (e.g. http://<master-node-ip>:<nodeport>). Auto-detected if empty.'
+            description: 'Public root URL of OpenSlice (e.g. http://<node-ip>:<ingress-nodeport>). Auto-detected from the cluster if empty.'
         )
 
-        // Database credentials
         string(
+            name: 'STORAGE_CLASS',
+            defaultValue: '',
+            description: 'StorageClass for MySQL. Empty = chart default (hostPath PV at /dockerdata-nfs/osmysql, single-node clusters only)'
+        )
+
+        string(
+            name: 'HELM_TIMEOUT',
+            defaultValue: '20m',
+            description: 'Timeout for helm upgrade --install --wait'
+        )
+
+        // Credentials
+        password(
             name: 'MYSQL_ROOT_PASSWORD',
             defaultValue: 'letmein',
             description: 'MySQL root password'
         )
 
-        string(
-            name: 'MYSQL_OPENSLICE_DB',
-            defaultValue: 'osdb',
-            description: 'OpenSlice database name'
-        )
-
-        // Keycloak credentials
         password(
             name: 'KEYCLOAK_ADMIN_PASSWORD',
             defaultValue: 'Pa55w0rd',
@@ -60,18 +88,17 @@ pipeline {
             description: 'NodePort for HTTP ingress (auto-detected if empty)'
         )
 
-        // CRIDGE kubeconfig
-        string(
-            name: 'KUBECONFIG_PATH',
-            defaultValue: '',
-            description: 'Path to kubeconfig file for CRIDGE (optional, uses in-cluster config if empty)'
-        )
-
-        // Optional: disable CRIDGE
+        // CRIDGE
         booleanParam(
             name: 'ENABLE_CRIDGE',
             defaultValue: true,
             description: 'Deploy CRIDGE component for Kubernetes CR management'
+        )
+
+        string(
+            name: 'CRIDGE_KUBECONFIG_CREDENTIALS_ID',
+            defaultValue: '',
+            description: 'Jenkins credential ID (Secret file) with the kubeconfig CRIDGE will manage. Empty = same as KUBECONFIG_CREDENTIALS_ID'
         )
 
         // Keycloak SSL disable
@@ -93,8 +120,12 @@ pipeline {
      * ENVIRONMENT
      ************************************************************/
     environment {
-        WORK_DIR = 'openslice-deploy'
-        REPO_URL = 'https://labs.etsi.org/rep/osl/code/org.etsi.osl.main.git'
+        WORK_DIR    = 'openslice-deploy'
+        REPO_URL    = 'https://labs.etsi.org/rep/osl/code/org.etsi.osl.main.git'
+        CHART_DIR   = 'openslice-deploy/org.etsi.osl.main/kubernetes/helm/openslice'
+        // Generated values (contains secrets) - kept outside the chart dir, removed in post
+        VALUES_OVERRIDE = 'openslice-deploy/values-override.yaml'
+        ROOT_URL_FILE   = 'openslice-deploy/root_url'
     }
 
     options { timestamps() }
@@ -109,26 +140,27 @@ pipeline {
         // ****************************
         stage('Validate environment') {
             steps {
-                sh '''#!/usr/bin/env bash
-                    set -eu
+                script {
+                    withKube {
+                        sh '''#!/usr/bin/env bash
+                            set -eu
 
-                    echo "Checking prerequisites..."
+                            echo "Checking prerequisites..."
+                            for bin in kubectl helm git curl; do
+                                command -v "$bin" >/dev/null 2>&1 || { echo "ERROR: $bin not found"; exit 1; }
+                            done
 
-                    command -v kubectl >/dev/null 2>&1 || { echo "ERROR: kubectl not found"; exit 1; }
-                    command -v helm >/dev/null 2>&1    || { echo "ERROR: helm not found"; exit 1; }
-                    command -v git >/dev/null 2>&1     || { echo "ERROR: git not found"; exit 1; }
+                            kubectl version --client
+                            helm version --short
 
-                    echo "kubectl version:"
-                    kubectl version --client --short 2>/dev/null || kubectl version --client
+                            echo "Checking cluster connectivity..."
+                            kubectl cluster-info >/dev/null || { echo "ERROR: Cannot connect to Kubernetes cluster"; exit 1; }
+                            kubectl get nodes -o wide
 
-                    echo "helm version:"
-                    helm version --short
-
-                    echo "Checking cluster connectivity..."
-                    kubectl cluster-info || { echo "ERROR: Cannot connect to Kubernetes cluster"; exit 1; }
-
-                    echo "All prerequisites met."
-                '''
+                            echo "All prerequisites met."
+                        '''
+                    }
+                }
             }
         }
 
@@ -137,20 +169,18 @@ pipeline {
         // ****************************
         stage('Clone OpenSlice repository') {
             steps {
-                sh """#!/usr/bin/env bash
+                sh '''#!/usr/bin/env bash
                     set -eu
 
                     rm -rf "${WORK_DIR}"
                     mkdir -p "${WORK_DIR}"
-                    cd "${WORK_DIR}"
 
-                    echo "Cloning branch: ${GIT_BRANCH}"
-                    git clone --branch "${GIT_BRANCH}" --depth 1 "${REPO_URL}"
-                    cd org.etsi.osl.main/kubernetes/helm/openslice/
+                    echo "Cloning org.etsi.osl.main @ ${OSL_VERSION}"
+                    git clone --branch "${OSL_VERSION}" --depth 1 "${REPO_URL}" "${WORK_DIR}/org.etsi.osl.main"
 
-                    echo "Repository cloned successfully."
-                    ls -la
-                """
+                    echo "Chart:"
+                    grep -E '^(version|appVersion):' "${CHART_DIR}/Chart.yaml"
+                '''
             }
         }
 
@@ -159,83 +189,26 @@ pipeline {
         // ****************************
         stage('Configure Web UIs') {
             steps {
-                sh """#!/usr/bin/env bash
-                    set -eu
-
-                    CHART_DIR="${WORK_DIR}/org.etsi.osl.main/kubernetes/helm/openslice"
-
-                    # Web UI config
-                    WEB_JS_DIR="\${CHART_DIR}/files/org.etsi.osl.portal.web/src/js"
-                    if [ -f "\${WEB_JS_DIR}/config.js.default" ] && [ ! -f "\${WEB_JS_DIR}/config.js" ]; then
-                        cp "\${WEB_JS_DIR}/config.js.default" "\${WEB_JS_DIR}/config.js"
-                        echo "Created config.js from default."
-                    fi
-
-                    # TMF Web UI config
-                    TMF_CFG_DIR="\${CHART_DIR}/files/org.etsi.osl.tmf.web/src/assets/config"
-                    if [ -f "\${TMF_CFG_DIR}/config.prod.default.json" ] && [ ! -f "\${TMF_CFG_DIR}/config.prod.json" ]; then
-                        cp "\${TMF_CFG_DIR}/config.prod.default.json" "\${TMF_CFG_DIR}/config.prod.json"
-                        echo "Created config.prod.json from default."
-                    fi
-                    if [ -f "\${TMF_CFG_DIR}/theming.default.scss" ] && [ ! -f "\${TMF_CFG_DIR}/theming.scss" ]; then
-                        cp "\${TMF_CFG_DIR}/theming.default.scss" "\${TMF_CFG_DIR}/theming.scss"
-                        echo "Created theming.scss from default."
-                    fi
-
-                    echo "Web UI configuration files ready."
-                """
-            }
-        }
-
-        // *********************************
-        // *** CONFIGURE HELM VALUES     ***
-        // *********************************
-        stage('Configure Helm values') {
-            steps {
                 sh '''#!/usr/bin/env bash
                     set -eu
 
-                    CHART_DIR="${WORK_DIR}/org.etsi.osl.main/kubernetes/helm/openslice"
-                    VALUES_FILE="${CHART_DIR}/values.yaml"
-
-                    # Determine ROOT_URL
-                    if [ -n "${ROOT_URL}" ]; then
-                        FINAL_ROOT_URL="${ROOT_URL}"
-                    else
-                        MASTER_IP=$(hostname -I | awk '{print $1}')
-                        # Detect NGINX Ingress NodePort for HTTP
-                        if [ -n "${INGRESS_NODEPORT_HTTP}" ]; then
-                            NODEPORT="${INGRESS_NODEPORT_HTTP}"
-                        else
-                            NODEPORT=$(kubectl get svc -n ingress -l app.kubernetes.io/name=ingress-nginx \
-                                -o jsonpath='{.items[0].spec.ports[?(@.name=="http")].nodePort}' 2>/dev/null || echo "")
-                            if [ -z "$NODEPORT" ]; then
-                                NODEPORT=$(kubectl get svc --all-namespaces -l app.kubernetes.io/name=ingress-nginx \
-                                    -o jsonpath='{.items[0].spec.ports[?(@.name=="http")].nodePort}' 2>/dev/null || echo "80")
-                            fi
+                    # Copy <dir>/<default> to <dir>/<target> if the default exists and the target does not
+                    from_default() {
+                        if [ -f "$1/$2" ] && [ ! -f "$1/$3" ]; then
+                            cp "$1/$2" "$1/$3"
+                            echo "Created $3 from $2."
                         fi
-                        FINAL_ROOT_URL="http://${MASTER_IP}:${NODEPORT}"
-                    fi
+                    }
 
-                    echo "Root URL: ${FINAL_ROOT_URL}"
+                    WEB_JS_DIR="${CHART_DIR}/files/org.etsi.osl.portal.web/src/js"
+                    TMF_CFG_DIR="${CHART_DIR}/files/org.etsi.osl.tmf.web/src/assets/config"
 
-                    # Update values.yaml with sed
-                    # Root URL
-                    sed -i "s|^rooturl:.*|rooturl: \"${FINAL_ROOT_URL}\"|" "${VALUES_FILE}"
+                    from_default "${WEB_JS_DIR}"  config.js.default             config.js
+                    from_default "${TMF_CFG_DIR}" config.prod.default.json      config.prod.json
+                    from_default "${TMF_CFG_DIR}" config.theming.default.json   config.theming.json
+                    from_default "${TMF_CFG_DIR}" theming.default.scss          theming.scss
 
-                    # MySQL credentials
-                    sed -i "s|password: \"letmein\"|password: \"${MYSQL_ROOT_PASSWORD}\"|" "${VALUES_FILE}"
-
-                    # Keycloak admin password
-                    sed -i "s|adminpassword: \"Pa55w0rd\"|adminpassword: \"${KEYCLOAK_ADMIN_PASSWORD}\"|" "${VALUES_FILE}"
-
-                    # CRIDGE toggle
-                    if [ "${ENABLE_CRIDGE}" = "false" ]; then
-                        sed -i '/^cridge:/,/^[a-z]/ s|enabled: true|enabled: false|' "${VALUES_FILE}"
-                        echo "CRIDGE disabled."
-                    fi
-
-                    echo "Helm values configured."
+                    echo "Web UI configuration files ready."
                 '''
             }
         }
@@ -245,27 +218,100 @@ pipeline {
         // ************************************
         stage('Ensure NGINX Ingress Controller') {
             steps {
-                sh '''#!/usr/bin/env bash
-                    set -eu
+                script {
+                    withKube {
+                        sh '''#!/usr/bin/env bash
+                            set -eu
 
-                    # Check if NGINX Ingress is already installed
-                    if kubectl get ns ingress >/dev/null 2>&1 && \
-                       kubectl get deployment -n ingress -l app.kubernetes.io/name=ingress-nginx >/dev/null 2>&1; then
-                        echo "NGINX Ingress Controller already deployed."
-                    else
-                        echo "Installing NGINX Ingress Controller..."
-                        helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx || true
-                        helm repo update
+                            if kubectl get ingressclass nginx >/dev/null 2>&1; then
+                                echo "IngressClass 'nginx' already exists - using the existing controller."
+                                echo "NOTE: Artemis TCP passthrough (61616) is only configured when this pipeline installs the controller."
+                            else
+                                echo "Installing NGINX Ingress Controller (NodePort)..."
+                                helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx >/dev/null 2>&1 || true
+                                helm repo update ingress-nginx
 
-                        helm upgrade --install nginx-ingress ingress-nginx/ingress-nginx \
-                            --namespace ingress --create-namespace \
-                            --set controller.service.type=NodePort \
-                            --set tcp.61616="${NAMESPACE}/${HELM_RELEASE}-artemis:61616"
+                                helm upgrade --install nginx-ingress ingress-nginx/ingress-nginx \
+                                    --namespace ingress --create-namespace \
+                                    --set controller.service.type=NodePort \
+                                    --set tcp.61616="${NAMESPACE}/${HELM_RELEASE}-artemis:61616" \
+                                    --wait --timeout 5m
+                            fi
+                        '''
+                    }
+                }
+            }
+        }
 
-                        echo "Waiting for NGINX Ingress to be ready..."
-                        kubectl rollout status deployment -n ingress nginx-ingress-ingress-nginx-controller --timeout=120s || true
-                    fi
-                '''
+        // *********************************
+        // *** CONFIGURE HELM VALUES     ***
+        // *********************************
+        stage('Configure Helm values') {
+            steps {
+                script {
+                    withKube {
+                        sh '''#!/usr/bin/env bash
+                            set -eu
+
+                            # YAML single-quoted scalar (safe for any password)
+                            q() { printf "'%s'" "$(printf '%s' "$1" | sed "s/'/''/g")"; }
+
+                            # ---- Root URL ----
+                            if [ -n "${ROOT_URL}" ]; then
+                                FINAL_ROOT_URL="${ROOT_URL%/}"
+                            else
+                                NODE_IP=$(kubectl get nodes -o jsonpath='{.items[0].status.addresses[?(@.type=="ExternalIP")].address}')
+                                [ -n "$NODE_IP" ] || NODE_IP=$(kubectl get nodes -o jsonpath='{.items[0].status.addresses[?(@.type=="InternalIP")].address}')
+
+                                NODEPORT="${INGRESS_NODEPORT_HTTP}"
+                                if [ -z "$NODEPORT" ]; then
+                                    NODEPORT=$(kubectl get svc -A \
+                                        -l app.kubernetes.io/name=ingress-nginx,app.kubernetes.io/component=controller \
+                                        -o jsonpath='{.items[0].spec.ports[?(@.name=="http")].nodePort}' 2>/dev/null || true)
+                                fi
+                                [ -n "$NODEPORT" ] || { echo "ERROR: could not detect ingress NodePort - set ROOT_URL or INGRESS_NODEPORT_HTTP"; exit 1; }
+
+                                FINAL_ROOT_URL="http://${NODE_IP}:${NODEPORT}"
+                            fi
+                            echo "${FINAL_ROOT_URL}" > "${ROOT_URL_FILE}"
+                            echo "Root URL: ${FINAL_ROOT_URL}"
+
+                            # ---- Image tag ----
+                            TAG="${IMAGE_TAG}"
+                            if [ -z "$TAG" ]; then
+                                case "${OSL_VERSION}" in
+                                    main)    TAG=latest ;;
+                                    develop) TAG=develop ;;
+                                    *)       TAG="${OSL_VERSION}" ;;
+                                esac
+                            fi
+                            echo "OpenSlice image tag: ${TAG}"
+
+                            # ---- Override values (instead of editing the chart's values.yaml) ----
+                            umask 077
+                            {
+                                echo "rooturl: $(q "${FINAL_ROOT_URL}")"
+                                [ -z "${STORAGE_CLASS}" ] || echo "storageClass: $(q "${STORAGE_CLASS}")"
+                                echo "oscreds:"
+                                echo "  mysql:"
+                                echo "    password: $(q "${MYSQL_ROOT_PASSWORD}")"
+                                echo "    keycloak:"
+                                echo "      adminpassword: $(q "${KEYCLOAK_ADMIN_PASSWORD}")"
+                                echo "cridge:"
+                                echo "  enabled: ${ENABLE_CRIDGE}"
+                                echo "image:"
+                                for img in bugzilla centrallog manoclient osom portalapi osscapi oasapi \
+                                           portalweb tmfweb cridge metrico mcpserver mcpbackend; do
+                                    echo "  ${img}:"
+                                    echo "    tag: $(q "${TAG}")"
+                                done
+                            } > "${VALUES_OVERRIDE}"
+
+                            echo "Helm override values written (secrets masked):"
+                            sed -E "s/(password: ).*/\\1'****'/" "${VALUES_OVERRIDE}"
+                        '''
+                    }
+                }
             }
         }
 
@@ -274,71 +320,67 @@ pipeline {
         // ****************************
         stage('Deploy OpenSlice') {
             steps {
-                sh '''#!/usr/bin/env bash
-                    set -eu
+                script {
+                    def cridgeCredId = params.CRIDGE_KUBECONFIG_CREDENTIALS_ID?.trim() ?: params.KUBECONFIG_CREDENTIALS_ID
+                    withKube {
+                        withCredentials([file(credentialsId: cridgeCredId, variable: 'CRIDGE_KUBECONFIG')]) {
+                            sh '''#!/usr/bin/env bash
+                                set -eu
 
-                    CHART_DIR="${WORK_DIR}/org.etsi.osl.main/kubernetes/helm/openslice"
-                    cd "${CHART_DIR}"
+                                HELM_EXTRA_ARGS=()
+                                if [ "${ENABLE_CRIDGE}" = "true" ]; then
+                                    # The chart refuses to render CRIDGE without a kubeconfig
+                                    HELM_EXTRA_ARGS+=(--set-file "cridge.kubeconfig.raw=${CRIDGE_KUBECONFIG}")
+                                    echo "CRIDGE kubeconfig provided from Jenkins credentials."
+                                fi
 
-                    HELM_EXTRA_ARGS=""
+                                echo "Deploying OpenSlice (${OSL_VERSION}) with Helm..."
+                                helm upgrade --install "${HELM_RELEASE}" "${CHART_DIR}" \
+                                    --namespace "${NAMESPACE}" \
+                                    --create-namespace \
+                                    -f "${VALUES_OVERRIDE}" \
+                                    "${HELM_EXTRA_ARGS[@]}" \
+                                    --timeout "${HELM_TIMEOUT}" \
+                                    --wait
 
-                    # CRIDGE kubeconfig
-                    if [ -n "${KUBECONFIG_PATH}" ] && [ -r "${KUBECONFIG_PATH}" ]; then
-                        HELM_EXTRA_ARGS="--set-file cridge.kubeconfig.raw=${KUBECONFIG_PATH}"
-                        echo "CRIDGE kubeconfig provided: ${KUBECONFIG_PATH}"
-                    fi
-
-                    echo "Deploying OpenSlice with Helm..."
-                    helm upgrade --install "${HELM_RELEASE}" . \
-                        --namespace "${NAMESPACE}" \
-                        --create-namespace \
-                        ${HELM_EXTRA_ARGS} \
-                        --timeout 10m \
-                        --wait
-
-                    echo "Helm deployment completed."
-                '''
+                                echo "Helm deployment completed."
+                                helm list -n "${NAMESPACE}" --filter "^${HELM_RELEASE}\\$"
+                            '''
+                        }
+                    }
+                }
             }
         }
 
         // ****************************************
-        // *** WAIT FOR PODS TO BE READY        ***
+        // *** WAIT FOR WORKLOADS TO BE READY   ***
         // ****************************************
-        stage('Wait for pods') {
+        stage('Wait for workloads') {
             steps {
-                sh '''#!/usr/bin/env bash
-                    set -eu
+                script {
+                    withKube {
+                        sh '''#!/usr/bin/env bash
+                            set -eu
 
-                    echo "Waiting for all pods in namespace ${NAMESPACE} to be ready..."
+                            SEL="app.kubernetes.io/instance=${HELM_RELEASE}"
 
-                    ATTEMPTS=60
-                    SLEEP_SECONDS=10
+                            echo "Waiting for deployments/statefulsets of release ${HELM_RELEASE}..."
+                            for w in $(kubectl get deploy,statefulset -n "${NAMESPACE}" -l "${SEL}" -o name); do
+                                kubectl rollout status -n "${NAMESPACE}" "$w" --timeout=10m
+                            done
 
-                    for i in $(seq 1 $ATTEMPTS); do
-                        NOT_READY=$(kubectl get pods -n "${NAMESPACE}" --no-headers 2>/dev/null | \
-                            grep -v "Running\|Completed" | wc -l)
-
-                        if [ "$NOT_READY" -eq 0 ]; then
-                            echo "All pods are running (attempt $i)."
-                            break
-                        fi
-
-                        echo "Waiting for $NOT_READY pod(s) to be ready (attempt $i/${ATTEMPTS})..."
-                        sleep "${SLEEP_SECONDS}"
-                    done
-
-                    echo ""
-                    echo "===== Pod Status ====="
-                    kubectl get pods -n "${NAMESPACE}"
-
-                    echo ""
-                    echo "===== Deployments ====="
-                    kubectl get deployments -n "${NAMESPACE}"
-
-                    echo ""
-                    echo "===== Services ====="
-                    kubectl get services -n "${NAMESPACE}"
-                '''
+                            echo ""
+                            echo "===== Pods ====="
+                            kubectl get pods -n "${NAMESPACE}" -o wide
+                            echo ""
+                            echo "===== Services ====="
+                            kubectl get svc -n "${NAMESPACE}"
+                            echo ""
+                            echo "===== Ingress ====="
+                            kubectl get ingress -n "${NAMESPACE}"
+                        '''
+                    }
+                }
             }
         }
 
@@ -350,42 +392,40 @@ pipeline {
                 expression { return params.DISABLE_KEYCLOAK_SSL }
             }
             steps {
-                sh '''#!/usr/bin/env bash
-                    set -eu
+                script {
+                    withKube {
+                        sh '''#!/usr/bin/env bash
+                            set -eu
 
-                    echo "Disabling Keycloak SSL requirement..."
+                            KC_POD=$(kubectl get pods -n "${NAMESPACE}" \
+                                -l "org.etsi.osl.service=keycloak,app.kubernetes.io/instance=${HELM_RELEASE}" \
+                                --field-selector=status.phase=Running \
+                                -o jsonpath='{.items[0].metadata.name}')
+                            [ -n "$KC_POD" ] || { echo "ERROR: Keycloak pod not found"; exit 1; }
+                            echo "Keycloak pod: ${KC_POD}"
 
-                    KC_POD=$(kubectl get pods -n "${NAMESPACE}" -l app="${HELM_RELEASE}-keycloak" \
-                        -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || \
-                        kubectl get pods -n "${NAMESPACE}" --no-headers | grep keycloak | awk '{print $1}' | head -1)
+                            # The admin password is sent via stdin so that it does not need shell quoting
+                            for i in $(seq 1 30); do
+                                if printf '%s\\n' "${KEYCLOAK_ADMIN_PASSWORD}" | kubectl exec -i -n "${NAMESPACE}" "${KC_POD}" -- /bin/sh -c '
+                                    read -r KCPASS
+                                    cd /opt/jboss/keycloak/bin 2>/dev/null || cd /opt/keycloak/bin
+                                    ./kcadm.sh config credentials --server http://localhost:8080/auth \
+                                        --realm master --user admin --password "$KCPASS" >/dev/null &&
+                                    ./kcadm.sh update realms/openslice -s sslRequired=NONE &&
+                                    ./kcadm.sh update realms/master -s sslRequired=NONE
+                                '; then
+                                    echo "Keycloak SSL requirement disabled for 'openslice' and 'master' realms."
+                                    exit 0
+                                fi
+                                echo "Keycloak not ready yet (attempt $i/30)..."
+                                sleep 10
+                            done
 
-                    if [ -z "$KC_POD" ]; then
-                        echo "WARNING: Keycloak pod not found, skipping SSL disable."
-                        exit 0
-                    fi
-
-                    echo "Keycloak pod: ${KC_POD}"
-
-                    # Wait for Keycloak to be ready
-                    for i in $(seq 1 30); do
-                        if kubectl exec -n "${NAMESPACE}" "${KC_POD}" -- curl -sf http://localhost:8080/auth >/dev/null 2>&1; then
-                            echo "Keycloak is responding."
-                            break
-                        fi
-                        echo "Waiting for Keycloak to start (attempt $i/30)..."
-                        sleep 10
-                    done
-
-                    kubectl exec -n "${NAMESPACE}" "${KC_POD}" -- /bin/sh -c "
-                        cd /opt/jboss/keycloak/bin/ 2>/dev/null || cd /opt/keycloak/bin/ 2>/dev/null || true
-                        ./kcadm.sh config credentials --server http://localhost:8080/auth \
-                            --realm master --user admin --password '${KEYCLOAK_ADMIN_PASSWORD}'
-                        ./kcadm.sh update realms/openslice -s sslRequired=NONE
-                        ./kcadm.sh update realms/master -s sslRequired=NONE
-                    " || echo "WARNING: kcadm commands failed, you may need to disable SSL manually."
-
-                    echo "Keycloak SSL requirement disabled for openslice and master realms."
-                '''
+                            echo "ERROR: could not disable Keycloak SSL requirement."
+                            exit 1
+                        '''
+                    }
+                }
             }
         }
 
@@ -397,47 +437,32 @@ pipeline {
                 sh '''#!/usr/bin/env bash
                     set -eu
 
-                    # Determine ROOT_URL for testing
-                    if [ -n "${ROOT_URL}" ]; then
-                        TEST_URL="${ROOT_URL}"
-                    else
-                        MASTER_IP=$(hostname -I | awk '{print $1}')
-                        if [ -n "${INGRESS_NODEPORT_HTTP}" ]; then
-                            NODEPORT="${INGRESS_NODEPORT_HTTP}"
-                        else
-                            NODEPORT=$(kubectl get svc -n ingress -l app.kubernetes.io/name=ingress-nginx \
-                                -o jsonpath='{.items[0].spec.ports[?(@.name=="http")].nodePort}' 2>/dev/null || echo "80")
-                        fi
-                        TEST_URL="http://${MASTER_IP}:${NODEPORT}"
-                    fi
-
+                    TEST_URL=$(cat "${ROOT_URL_FILE}")
                     echo "Smoke testing OpenSlice at: ${TEST_URL}"
 
-                    ATTEMPTS=30
-                    SUCCESS=0
+                    # <name> <path> <accepted HTTP codes regex>
+                    check() {
+                        for i in $(seq 1 30); do
+                            CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 "${TEST_URL}$2" || true)
+                            if [[ "$CODE" =~ ^($3)$ ]]; then
+                                echo "OK   $1 -> HTTP ${CODE}"
+                                return 0
+                            fi
+                            echo "...  $1 -> HTTP ${CODE} (attempt $i/30)"
+                            sleep 10
+                        done
+                        echo "FAIL $1 (${TEST_URL}$2)"
+                        return 1
+                    }
 
-                    for i in $(seq 1 $ATTEMPTS); do
-                        HTTP_CODE=$(curl -sS -o /dev/null -w "%{http_code}" "${TEST_URL}/tmf-api/serviceCatalogManagement/v4/serviceCatalog" 2>/dev/null || echo "000")
+                    check "TMF Web UI"        "/"                                                   "200"
+                    check "Keycloak realm"    "/auth/realms/openslice"                              "200"
+                    check "TMF Service API"   "/tmf-api/serviceCatalogManagement/v4/serviceCatalog" "200|401"
 
-                        if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "401" ]; then
-                            echo "OpenSlice TMF API is responding (HTTP ${HTTP_CODE}) at attempt $i."
-                            SUCCESS=1
-                            break
-                        fi
-
-                        echo "Not ready yet (HTTP ${HTTP_CODE}), attempt $i/${ATTEMPTS}..."
-                        sleep 10
-                    done
-
-                    if [ "$SUCCESS" -ne 1 ]; then
-                        echo "WARNING: OpenSlice TMF API did not respond within expected time."
-                        echo "Deployment may still be initializing. Check pods:"
-                        kubectl get pods -n "${NAMESPACE}"
-                    else
-                        echo "OpenSlice deployment verified successfully!"
-                        echo "Access OpenSlice at: ${TEST_URL}"
-                        echo "Keycloak admin:      ${TEST_URL}/auth"
-                    fi
+                    echo ""
+                    echo "OpenSlice ${OSL_VERSION} deployed successfully."
+                    echo "Access OpenSlice at: ${TEST_URL}"
+                    echo "Keycloak admin:      ${TEST_URL}/auth"
                 '''
             }
         }
@@ -448,15 +473,22 @@ pipeline {
      ************************************************************/
     post {
         success {
-            echo "OpenSlice deployed successfully on node '${params.NODE_LABEL}' in namespace '${params.NAMESPACE}'."
+            echo "OpenSlice ${params.OSL_VERSION} deployed in namespace '${params.NAMESPACE}' (release '${params.HELM_RELEASE}')."
         }
         failure {
-            echo "OpenSlice deployment failed. Check logs above on node '${params.NODE_LABEL}'."
+            echo "OpenSlice deployment failed. Current state of namespace '${params.NAMESPACE}':"
+            script {
+                try {
+                    withKube {
+                        sh 'kubectl get pods -n "${NAMESPACE}" -o wide || true'
+                    }
+                } catch (err) {
+                    echo "Could not query the cluster: ${err}"
+                }
+            }
         }
         always {
-            sh """#!/usr/bin/env bash
-                rm -rf "${WORK_DIR}" || true
-            """
+            sh 'rm -rf "${WORK_DIR}" || true'
         }
     }
 }
