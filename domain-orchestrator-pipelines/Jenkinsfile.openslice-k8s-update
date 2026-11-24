@@ -16,13 +16,13 @@ pipeline {
     parameters {
         string(
             name: 'NODE_LABEL',
-            defaultValue: 'openslice-node',
+            defaultValue: 'cop-pilot-staging-cluster',
             description: 'Jenkins node label where the pipeline runs (needs kubectl, helm >= 3.14, git, curl, gzip)'
         )
 
         string(
             name: 'KUBECONFIG_CREDENTIALS_ID',
-            defaultValue: 'openslice-kubeconfig',
+            defaultValue: 'staging-kubeconfig',
             description: 'Jenkins credential ID (type: Secret file) with the kubeconfig of the target cluster'
         )
 

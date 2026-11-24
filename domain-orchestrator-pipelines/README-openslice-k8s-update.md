@@ -26,7 +26,7 @@ MySQL data (PVC) is not touched by the upgrade.
 ## ✅ Prerequisites
 
 - A Helm release of OpenSlice in `NAMESPACE`, in `deployed` state
-- Jenkins **Secret file** credential with the target cluster's kubeconfig (default ID: `openslice-kubeconfig`)
+- Jenkins **Secret file** credential with the target cluster's kubeconfig (default ID: `staging-kubeconfig`)
 - Agent with `kubectl`, **`helm` ≥ 3.14**, `git`, `curl`, `gzip`
 
 ---
@@ -35,8 +35,8 @@ MySQL data (PVC) is not touched by the upgrade.
 
 | Parameter                   | Default                | Description                                                                         |
 | --------------------------- | ---------------------- | ----------------------------------------------------------------------------------- |
-| `NODE_LABEL`                | `openslice-node`       | Jenkins agent label                                                                 |
-| `KUBECONFIG_CREDENTIALS_ID` | `openslice-kubeconfig` | Jenkins **Secret file** credential with the kubeconfig                              |
+| `NODE_LABEL`                | `cop-pilot-staging-cluster`       | Jenkins agent label                                                                 |
+| `KUBECONFIG_CREDENTIALS_ID` | `staging-kubeconfig` | Jenkins **Secret file** credential with the kubeconfig                              |
 | `TARGET_VERSION`            | `2026Q2`               | Release to update to: tag/branch of `org.etsi.osl.main`                             |
 | `IMAGE_TAG`                 | *(derived)*            | Image tag override. Empty: `main` → `latest`, `develop` → `develop`, otherwise `TARGET_VERSION` |
 | `NAMESPACE`                 | `openslice`            | Namespace of the running instance                                                   |
