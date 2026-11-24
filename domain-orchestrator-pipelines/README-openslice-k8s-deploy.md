@@ -43,7 +43,7 @@ Based on the official [OpenSlice Kubernetes Deployment Guide](https://osl.etsi.o
 **Jenkins**
 
 - A **Secret file** credential containing the kubeconfig of the target
-  cluster (default ID: `openslice-kubeconfig`)
+  cluster (default ID: `staging-kubeconfig`)
 - An agent (label `NODE_LABEL`) with `kubectl`, `helm` (v3+), `git`, and `curl`
 - Network access from the agent to:
   - `https://labs.etsi.org` (to clone the chart)
@@ -67,8 +67,8 @@ Based on the official [OpenSlice Kubernetes Deployment Guide](https://osl.etsi.o
 
 | Parameter                   | Default                | Description                                                                 |
 | --------------------------- | ---------------------- | --------------------------------------------------------------------------- |
-| `NODE_LABEL`                | `openslice-node`       | Jenkins agent label where the pipeline runs                                 |
-| `KUBECONFIG_CREDENTIALS_ID` | `openslice-kubeconfig` | Jenkins **Secret file** credential with the target cluster's kubeconfig     |
+| `NODE_LABEL`                | `cop-pilot-staging-cluster`       | Jenkins agent label where the pipeline runs                                 |
+| `KUBECONFIG_CREDENTIALS_ID` | `staging-kubeconfig` | Jenkins **Secret file** credential with the target cluster's kubeconfig     |
 | `OSL_VERSION`               | `2025Q4`               | OpenSlice release: tag/branch of `org.etsi.osl.main` (`2025Q4`, `2026Q2`, `main`, `develop`) |
 | `IMAGE_TAG`                 | *(derived)*            | Image tag override. Empty: `main` → `latest`, `develop` → `develop`, otherwise `OSL_VERSION` |
 | `NAMESPACE`                 | `openslice`            | Kubernetes namespace for OpenSlice                                          |
