@@ -307,7 +307,10 @@ EXCLUDE_NAMES = {
     "Create virtual machine",
     "Run playbook",
     "Install seismic simulator",
-    "Install executor"
+    "Install executor",
+    "Fiware History",
+    "Calculator_Service_Harbor",
+    "Calculator_Service"
 }
 
 EXCLUDE_TYPES = {
